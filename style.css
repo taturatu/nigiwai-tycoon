@@ -50,7 +50,7 @@ body { font-family:'MPlusRounded','Hiragino Maru Gothic ProN','Hiragino Sans',sa
 .fever-row { display:flex; align-items:center; gap:7px; margin-top:7px; font-size:12px; font-weight:800; }
 #feverLabel { white-space:nowrap; flex:none; font-size:11.5px; }
 .fever-row .bar-track { min-width:48px; }
-#buffLabel { color:#8ef58a; font-size:11px; white-space:nowrap; flex:none; }
+#buffLabel { color:#8ef58a; font-size:10.5px; white-space:nowrap; flex:none; }
 body.fever #hud { border-bottom-color:#ff512f; }
 body.fever #feverLabel { color:#ffb52e; }
 
@@ -60,7 +60,7 @@ body.fever #feverLabel { color:#ffb52e; }
 
 /* エリアタブ */
 #districtTabs { display:flex; gap:5px; margin:9px 8px 0; }
-.dtab { flex:1; min-width:0; border:none; padding:9px 1px; font-size:11px; font-weight:900; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.3);
+.dtab { flex:1; min-width:0; border:none; padding:9px 0; font-size:10px; letter-spacing:-.2px; font-weight:900; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.3);
   background:url('img/ui/btn_blue.png') center/100% 100% no-repeat; opacity:.65; white-space:nowrap; overflow:hidden; }
 .dtab.active { opacity:1; transform:scale(1.02); }
 
@@ -146,7 +146,7 @@ body.fever #feverLabel { color:#ffb52e; }
 
 /* 下部タブとリスト */
 #tabs { display:flex; gap:8px; margin:14px 10px 0; }
-.tab { flex:1; min-width:0; border:none; padding:10px 3px; font-size:13px; font-weight:900; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.3);
+.tab { flex:1; min-width:0; border:none; padding:10px 1px; font-size:12px; font-weight:900; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.3);
   background:url('img/ui/btn_blue.png') center/100% 100% no-repeat; opacity:.6; white-space:nowrap; }
 .tab.active { opacity:1; }
 #list { margin:8px 10px 0; }
@@ -197,7 +197,7 @@ body.has-3d #plots, body.has-3d #road { display:none; }
 
 /* v4: 一括回収・トースト・実績 */
 #collectAllBtn { display:block; width:100%; margin:8px 0 0; font-size:16px; }
-#toast { position:fixed; left:50%; top:118px; transform:translateX(-50%); z-index:97; background:linear-gradient(180deg,#fff8d6,#ffe9a8); border:3px solid #e8a812; border-radius:14px; padding:9px 16px; font-weight:800; font-size:14.5px; color:#7a4d00; box-shadow:0 6px 18px rgba(0,0,0,.3); max-width:92vw; text-align:center; }
+#toast { position:fixed; left:50%; bottom:18px; transform:translateX(-50%); z-index:97; pointer-events:none; background:linear-gradient(180deg,#fff8d6,#ffe9a8); border:3px solid #e8a812; border-radius:14px; padding:9px 16px; font-weight:800; font-size:14.5px; color:#7a4d00; box-shadow:0 6px 18px rgba(0,0,0,.3); max-width:92vw; text-align:center; }
 #toast.hidden { display:none; }
 .ach-card { display:flex; align-items:center; gap:10px; background:#fff; border:2px solid #eadfc2; border-radius:12px; padding:8px 10px; margin-bottom:8px; }
 .ach-card.done { background:linear-gradient(180deg,#fffbe8,#ffedb5); border-color:#e8a812; }
@@ -261,6 +261,11 @@ body { background:linear-gradient(180deg,#274b73 0%,#5ea9dd 26%,#aee3ff 52%,#ffe
 
 /* ===== v17 改善（自作CSS）：詳細パネルの折り返し許可は #detailSub .sub-line を normal に変更、
    ready-glow の対象に詳細の回収ボタンも追加、ボタンアイコン拡大・HUD/目標バナーの文字詰め ===== */
+
+/* ===== v18 改善（自作CSS）：トーストを画面下部へ移し pointer-events:none で
+   エリアタブ／目標バナーを塞がないように、エリアタブ(10px)・下部タブ(12px)の
+   フォントと余白を詰めて「にぎわいタウン 0/12」「リニューアル」の右端切れを解消、
+   buffLabel も少し詰めた（各ルールは既存定義側を直接変更済み） ===== */
 
 /* ===== v16 改善（自作CSS） ===== */
 #collectAllBtn.ready-glow, #collectBtn.ready-glow { animation:collectGlow .55s infinite alternate; }

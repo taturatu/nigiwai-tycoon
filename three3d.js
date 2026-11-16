@@ -284,6 +284,9 @@ window.T3D = (function () {
       const pad = new THREE.Mesh(new THREE.CylinderGeometry(1.16, 1.28, 0.22, 24),
         new THREE.MeshStandardMaterial({ color: built ? 0xb8c2cc : 0xffd94d, roughness: 0.7, emissive: built ? 0x000000 : 0xaa7700, emissiveIntensity: built ? 0 : 0.35 }));
       pad.position.y = 0.11; pad.receiveShadow = true;
+      // 空き地パッドはさらに小さくする：v17の縮小でも黄色い円盤が隣とくっついて見え、
+      // 建物よりパッドが目立っていた。建てた瞬間に通常サイズへ戻す（refreshShop・v18）
+      if (!built) pad.scale.set(0.82, 1, 0.82);
       group.add(pad);
       // 選択リング
       const ring = new THREE.Mesh(new THREE.RingGeometry(1.34, 1.54, 32),
@@ -363,6 +366,7 @@ window.T3D = (function () {
       if (rec.icon) { rec.group.remove(rec.icon); rec.icon = null; }
       if (rec.label) { rec.group.remove(rec.label); rec.label = null; }
       rec.pad.material.color.set(0xb8c2cc);
+      rec.pad.scale.set(1, 1, 1); // 空き地時の縮小（v18）を戻して建物の土台にする
       rec.pad.material.emissive.set(0x000000); rec.pad.material.emissiveIntensity = 0;
       addBuilding(rec, animateIn);
     }

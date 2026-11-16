@@ -295,8 +295,13 @@ function floatNumAt(clientX, clientY, text, crit) {
   el.className = 'float-num' + (crit ? ' crit' : '');
   el.textContent = text;
   el.style.position = 'fixed'; el.style.zIndex = '96';
-  el.style.left = clientX + 'px'; el.style.top = clientY + 'px';
+  // 画面端の店やタップボタンでは長い文字（CRITICAL!等）が右端で切れていたため、
+  // 表示位置を画面内に収まるようクランプする（v18）
+  const maxX = Math.max(8, (window.innerWidth || 360) - (crit ? 215 : 155));
+  const cx = Math.max(8, Math.min(clientX, maxX));
+  el.style.left = cx + 'px'; el.style.top = Math.max(4, clientY) + 'px';
   document.body.appendChild(el);
+  setTimeout(() => el.remove(), 1150); // 低FPSでgsapが進まなくても残り続けないフォールバック（v18）
   if (window.gsap) gsap.to(el, { y: -80 - Math.random() * 25, x: (Math.random() - 0.5) * 44, opacity: 0, duration: 0.95, ease: 'power1.out', onComplete: () => el.remove() });
   else setTimeout(() => el.remove(), 900);
 }
@@ -525,11 +530,13 @@ function buildPlots() {
     Object.keys(plotRefs).forEach(k => delete plotRefs[k]);
     const shops = SHOPS.filter(s => s.d === district);
     shops.forEach(shop => { plotRefs[shop.id] = { el: makeProxyEl(shop), fill: null, num: null, price: null }; });
-    // 空き地ラベルは「次に建てる最安の店」と「今すぐ建てられる店」だけに出す。
-    // 全店に出すと3D上でラベル同士が重なって読めず、街の見た目も騒がしくなっていた（v17）
+    // 空き地ラベルは「次に建てる最安の店」1つだけに出す。
+    // v17で「買える店」まで広げたら、隣り合う2軒（パン屋とラーメン屋等）のラベルが
+    // 3D投影で重なって両方読めなくなったため、1軒に絞り切る（v18）。
+    // 最安の店が買える状態なら他の店もタップで詳細が見えるので実用上の問題はない。
     T3D.buildDistrict(shops, s => S.lv[s.id] > 0, s => {
       const next = cheapestUnbuilt(district);
-      if (!next || (next.id !== s.id && S.coins < buildCost(s))) return '';
+      if (!next || next.id !== s.id) return '';
       return buildCost(s) === 0 ? '初回無料！' : fmt(buildCost(s)) + ' コイン';
     });
     if (selectedId) T3D.highlight(selectedId);
@@ -661,8 +668,8 @@ function refreshDetail() {
     const capNow = stockCap(shop);
     const fillRate = rateOf(shop) * multProd() * (1 - autoRate());
     const fullLine = S.stock[shop.id] >= capNow * 0.999
-      ? '<div class="sub-line">💰 ストック満タン！ 早く回収しよう</div>'
-      : (fillRate > 0 ? '<div class="sub-line">⏳ 満タンまで ' + fmtEta((capNow - S.stock[shop.id]) / fillRate) + '</div>' : '');
+      ? '<div class="sub-line">💰 ストック満タン！ 回収で+20%ボーナス</div>'
+      : (fillRate > 0 ? '<div class="sub-line">⏳ 満タンまで ' + fmtEta((capNow - S.stock[shop.id]) / fillRate) + '（満タン回収で+20%）</div>' : '');
     $('detailSub').innerHTML = '<div class="sub-line">売上ストック <b>' + fmt(S.stock[shop.id]) + '</b> / ' + fmt(capNow) + '</div>' +
       '<div class="sub-line">1回 +' + fmt(batchOf(shop)) + '（' + shop.cycle + '秒ごと）・生産 +' + fmt(rateOf(shop)) + '/秒</div>' +
       '<div class="sub-line">次のLvで 1回 +' + fmt(batchOf(shop) * 1.6) + '（+60%）</div>' + fullLine + mileLine;
@@ -722,7 +729,9 @@ function refreshAll() {
   const ca = $('collectAllBtn');
   const ts = totalStock();
   const hitShops = SHOPS.filter(s => Math.floor(S.stock[s.id] || 0) >= 1).length;
-  ca.innerHTML = '💰 まとめて回収（' + hitShops + '軒） +' + fmt(ts);
+  // 満タンの店がある時はボタンにも出して回収を促す（満タン中は生産が止まる＝損なため・v18）
+  const fullShops = SHOPS.filter(s => S.lv[s.id] > 0 && stockCap(s) > 0 && (S.stock[s.id] || 0) >= stockCap(s) * 0.999).length;
+  ca.innerHTML = '💰 まとめて回収（' + hitShops + '軒） +' + fmt(ts) + (fullShops ? ' 🔔満タン' + fullShops + '軒！' : '');
   ca.disabled = ts < 1;
   // 光るしきい値は進行度連動：固定500だと序盤（ストック上限36等）では永遠に光らなかった（v17）
   const capTotal = SHOPS.reduce((t, s) => t + (S.lv[s.id] > 0 ? stockCap(s) : 0), 0);
@@ -782,10 +791,10 @@ function refreshAll() {
         if (T3D.setLevel) T3D.setLevel(shop.id, S.lv[shop.id]); // レベルで建物が育つ
       } else {
         T3D.setAfford(shop.id, S.coins >= buildCost(shop));
-        // 空き地ラベルは所持金の変化に追随させる（建てられるようになった店にだけ付け直す・v17）
+        // 空き地ラベルは所持金の変化に追随させる（対象は次の最安店1軒だけ・v18で絞り切り）
         if (T3D.setLabel) {
           const nextU = cheapestUnbuilt(district);
-          const showL = !!nextU && (nextU.id === shop.id || S.coins >= buildCost(shop));
+          const showL = !!nextU && nextU.id === shop.id;
           T3D.setLabel(shop.id, shop.name, showL ? (buildCost(shop) === 0 ? '初回無料！' : fmt(buildCost(shop)) + ' コイン') : '');
         }
       }
@@ -860,37 +869,48 @@ function collectShop(shop, el) {
     }
     return;
   }
+  // 満タン回収ボーナス：ストック満タンで回収すると+20%（満タンまで待つ楽しみ＝変動報酬の強化・v18）
+  const fullBonus = S.stock[shop.id] >= stockCap(shop) * 0.999 ? Math.ceil(amount * 0.20) : 0;
+  const grand = amount + fullBonus;
   S.stock[shop.id] = 0;
-  S.stats.collects++; S.stats.collectCoins += amount;
-  earn(amount);
+  S.stats.collects++; S.stats.collectCoins += grand;
+  earn(grand);
   play('collect', 0.9);
   synth('collect'); buzz(12);
+  if (fullBonus > 0) { play('confirm'); fireConfetti({ particleCount: 30, spread: 65, origin: { y: 0.45 } }); }
   addFever(Math.min(10, 2 + amount / Math.max(1, batchOf(shop)) * 2));
   flyCoins(el, Math.min(6, 2 + Math.floor(amount / Math.max(1, batchOf(shop)))));
-  if (el) { const r = el.getBoundingClientRect(); floatNumAt(r.left + 10, r.top - 10, '+' + fmt(amount), amount >= batchOf(shop) * 8); }
-  checkQuest(); refreshAll();
+  if (el) { const r = el.getBoundingClientRect(); floatNumAt(r.left + 10, r.top - 10, '+' + fmt(grand) + (fullBonus ? ' 満タン!' : ''), grand >= batchOf(shop) * 8); }
+  checkQuest(); save(); refreshAll(); // 個別回収だけ save が無く他アクションと不揃いだった（即時保存に統一・v18）
 }
 // 全店まとめて回収
 function totalStock() { return SHOPS.reduce((t, s) => t + Math.floor(S.stock[s.id] || 0), 0); }
 function collectAll() {
-  let total = 0, shopsHit = 0;
+  let total = 0, shopsHit = 0, fullBonus = 0, fullCount = 0;
   SHOPS.forEach(shop => {
     const a = Math.floor(S.stock[shop.id]);
-    if (a > 0) { S.stock[shop.id] = 0; total += a; shopsHit++; }
+    if (a > 0) {
+      // 満タンの店は1軒ごとに+20%（個別回収の満タンボーナスと条件を揃える・v18）
+      if (S.lv[shop.id] > 0 && a >= stockCap(shop) * 0.999) { fullBonus += Math.ceil(a * 0.20); fullCount++; }
+      S.stock[shop.id] = 0; total += a; shopsHit++;
+    }
   });
   if (total < 1) { play('error'); return; }
   // まとめ回収ボーナス：2軒以上を一気に回収すると合計の10%を上乗せ（変動報酬の強化・v17）
   const bonus = shopsHit >= 2 ? Math.ceil(total * 0.10) : 0;
-  const grand = total + bonus;
+  const grand = total + bonus + fullBonus;
   S.stats.collects += shopsHit; S.stats.collectCoins += grand;
   earn(grand);
   play('collect', 1); synth('collect'); buzz(20);
   addFever(Math.min(14, 2 + shopsHit));
   const m = $('map').getBoundingClientRect();
   flyCoins({ getBoundingClientRect: () => ({ left: m.left + m.width / 2 - 20, top: m.top + m.height / 2, width: 40, height: 20 }) }, 8);
-  floatNumAt(m.left + m.width / 2 - 50, m.top + 30, 'まとめて +' + fmt(grand) + (bonus ? '（ボーナス+' + fmt(bonus) + '！）' : ''), grand > 100000);
+  const bonusParts = [];
+  if (bonus) bonusParts.push('まとめ+' + fmt(bonus));
+  if (fullBonus) bonusParts.push('満タン' + fullCount + '軒+' + fmt(fullBonus));
+  floatNumAt(m.left + m.width / 2 - 50, m.top + 30, 'まとめて +' + fmt(grand) + (bonusParts.length ? '（' + bonusParts.join('・') + '！）' : ''), grand > 100000);
   if (grand > 100000 || shopsHit >= 3) { synth('fanfare'); fireConfetti({ particleCount: 50, spread: 90, origin: { y: 0.4 } }); }
-  else if (bonus > 0) fireConfetti({ particleCount: 26, spread: 60, origin: { y: 0.45 } });
+  else if (bonus > 0 || fullBonus > 0) fireConfetti({ particleCount: 26, spread: 60, origin: { y: 0.45 } });
   checkQuest(); save(); refreshAll();
 }
 function upgradeSelected() {
@@ -1111,13 +1131,19 @@ function gachaResult() {
 
 // ---------- 街の賑わい（外部素材：Kenneyタイルの人々・Emotes） ----------
 const EMOTES = ['faceHappy','heart','star','cash','music','idea','stars','hearts'];
+let lastSpeechShopId = null;
 function spawnSpeech() {
+  const layer = $('speechLayer');
+  // 同時は1つまで：建物が1軒だけの序盤は同じ店に吹き出しが重なって両方読めなかった（v18）
+  if (layer.children.length >= 1) return;
   const built = SHOPS.filter(s => s.d === district && S.lv[s.id] > 0);
   if (!built.length) return;
-  const shop = built[Math.floor(Math.random() * built.length)];
+  // 同じ店の連続は避けて、街のあちこちから声が上がるようにする
+  let candidates = built.filter(s => s.id !== lastSpeechShopId);
+  if (!candidates.length) candidates = built;
+  const shop = candidates[Math.floor(Math.random() * candidates.length)];
+  lastSpeechShopId = shop.id;
   const ref = plotRefs[shop.id]; if (!ref) return;
-  const layer = $('speechLayer');
-  if (layer.children.length > 2) return;
   const el = document.createElement('div');
   el.className = 'speech';
   el.innerHTML = '<img src="img/emotes/emote_' + EMOTES[Math.floor(Math.random() * EMOTES.length)] + '.png" alt=""> ' +
@@ -1125,10 +1151,11 @@ function spawnSpeech() {
   el.style.left = Math.min(ref.el.offsetLeft, 230) + 'px';
   el.style.top = Math.max(0, ref.el.offsetTop - 16) + 'px';
   layer.appendChild(el);
+  setTimeout(() => el.remove(), 3600); // 低FPSでgsapが進まなくても必ず消えるフォールバック（v18）
   if (window.gsap) {
     gsap.fromTo(el, { scale: 0.5, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3, ease: 'back.out(2.5)' });
     gsap.to(el, { opacity: 0, delay: 3, duration: 0.5, onComplete: () => el.remove() });
-  } else setTimeout(() => el.remove(), 3400);
+  }
 }
 function spawnWalker() {
   if (USE3D) return; // 3Dでは本物の車モデルが走る
