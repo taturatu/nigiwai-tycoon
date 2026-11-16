@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>にぎわい商店街タイクーン v16</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="flash"></div>
+<div id="app">
+
+<header id="hud">
+  <div class="hud-row">
+    <div class="coin-box">
+      <img src="img/twemoji/1f4b0.svg" alt="お金袋" class="hud-icon" id="coinIcon">
+      <div>
+        <div id="coins">0</div>
+        <div id="perSec">生産 +0 / 秒</div>
+      </div>
+    </div>
+    <div class="star-box" title="転生スター">
+      <img src="img/twemoji/2b50.svg" alt="星" class="mini-icon">
+      <span id="starCount">0</span>
+    </div>
+    <div class="star-box" id="rankBox" title="称号">
+      🏆 <span id="rankName">駆け出し店長</span>
+    </div>
+    <button id="soundBtn" class="round-btn" aria-label="サウンド切替">🔊</button>
+    <button id="creditsBtn" class="round-btn" aria-label="クレジット">ℹ️</button>
+  </div>
+  <div class="fever-row">
+    <img src="img/twemoji/1f525.svg" alt="炎" class="mini-icon">
+    <span id="feverLabel">FEVERゲージ</span>
+    <div class="bar-track"><img class="bar-fill-img" id="feverFill" src="img/ui/bar_color.png" alt=""></div>
+    <span id="buffLabel"></span>
+  </div>
+</header>
+
+<div id="goalBanner">
+  <span id="goalText">つぎの目標：</span>
+  <div class="bar-track small"><img class="bar-fill-img" id="goalFill" src="img/ui/bar_color.png" alt=""></div>
+</div>
+
+<div id="districtTabs">
+  <button class="dtab active" data-district="0">🏘️ 商店街<span class="dtab-count" id="dCount0"></span></button>
+  <button class="dtab" data-district="1">🌃 にぎわいタウン<span class="dtab-count" id="dCount1"></span> <span id="d2lock">🔒</span></button>
+  <button class="dtab" data-district="2">🚀 ゆめタウン<span class="dtab-count" id="dCount2"></span> <span id="d3lock">🔒</span></button>
+</div>
+
+<section id="mapWrap">
+  <div id="map">
+    <div id="map3d"></div>
+    <div id="plots"></div>
+    <div id="road"><div id="carLayer"></div></div>
+    <div id="speechLayer"></div>
+    <div id="chestLayer"></div>
+    <div id="floatLayer"></div>
+    <div id="lockOverlay" class="hidden">
+      <div class="lock-title" id="lockTitle">🔒 にぎわいタウンはまだ先</div>
+      <div id="lockText">条件：</div>
+    </div>
+  </div>
+</section>
+
+<button id="collectAllBtn" class="kenney-btn green" disabled>💰 まとめて回収（全店） +0</button>
+
+<section id="detail" class="panel">
+  <div id="detailEmpty">マップのお店をタップすると、回収と強化ができるよ。空き地の看板をタップするとお店が建つ！呼び込みボタンは長押しで連打できるよ。フィーバーボタンをタップするとゲージが少し上がるよ。</div>
+  <div id="detailMain" class="hidden">
+    <img id="detailIcon" src="" alt="">
+    <div class="detail-info">
+      <div id="detailName">-</div>
+      <div id="detailSub">-</div>
+      <div id="detailFlavor">-</div>
+    </div>
+    <div class="detail-btns">
+      <button id="collectBtn" class="kenney-btn green">回収する</button>
+      <button id="upgradeBtn" class="kenney-btn yellow">強化する</button>
+      <button id="upgrade10Btn" class="kenney-btn blue">10Lv強化</button>
+    </div>
+  </div>
+</section>
+
+<section id="actionRow">
+  <button id="gachaBtn" class="kenney-btn red">
+    <img src="img/twemoji/1f3b0.svg" alt="スロット" class="btn-icon">
+    <span>ラッキー<br>ガチャ</span>
+    <span id="gachaCd"></span>
+  </button>
+  <button id="tapBtn" aria-label="呼び込みタップ">
+    <img src="img/twemoji/1f3ea.svg" alt="お店" id="tapImg">
+    <span id="tapLabel">呼び込み！</span>
+    <span id="tapValue">+1</span>
+  </button>
+  <div id="comboBox" class="hidden">
+    <img src="img/twemoji/1f525.svg" alt="炎" class="mini-icon">
+    <span id="comboCount">0</span>連打<span id="comboMultLabel"></span>
+  </div>
+  <button id="feverInfoBtn" class="kenney-btn blue">
+    <img src="img/twemoji/1f525.svg" alt="炎" class="btn-icon">
+    <span id="feverBtnText">フィーバー<br>あと100</span>
+  </button>
+</section>
+
+<section id="questBox" class="panel">
+  <div class="quest-head">📜 クエスト <span id="questReward"></span></div>
+  <div id="questText">-</div>
+  <div class="bar-track"><img class="bar-fill-img" id="questFill" src="img/ui/bar_color.png" alt=""></div>
+</section>
+
+<nav id="tabs">
+  <button class="tab active" data-tab="upgrades">⚡ 全体強化</button>
+  <button class="tab" data-tab="ach">🏅 実績 <span id="achBadge"></span></button>
+  <button class="tab" data-tab="zukan">📖 ずかん</button>
+  <button class="tab" data-tab="prestige">✨ リニューアル</button>
+</nav>
+<main id="list" class="panel"></main>
+
+</div>
+<!-- モーダル類は #app の外に置く（#app の揺れ変形や body の filter が fixed 配置を壊し、
+     モーダルが画面外にずれて閉じられなくなる不具合の対策・自作修正） -->
+<div id="toast" class="hidden"></div>
+
+<div id="modal" class="hidden">
+  <div id="modalCard">
+    <div id="modalEmoji"></div>
+    <h2 id="modalTitle"></h2>
+    <p id="modalText"></p>
+    <button id="modalBtn" class="kenney-btn green big">やったー！</button>
+  </div>
+</div>
+
+<div id="credits" class="hidden">
+  <div id="creditsCard">
+    <h2>クレジット / 素材について</h2>
+    <h3>🌐 外部オブジェクト（自分では作っていません）</h3>
+    <ul>
+      <li>お店・ごほうび等の絵：Twemoji（Twitter, CC-BY 4.0）SVG画像</li>
+      <li>3Dの建物・車・木・食べ物モデル：Kenney「City Kit (Suburban / Commercial) / Car Kit / Food Kit」（CC0）glbモデルをそのまま使用</li>
+      <li>3D描画エンジン：Three.js（MIT・外部JSライブラリ）</li>
+      <li>マップの街タイル・お客さんの表情：Kenney「Tiny City / Emotes Pack」（CC0）</li>
+      <li>ボタン・パネル・ゲージ・矢印などレイアウトの見た目素材：Kenney「UI Pack」（CC0）PNG画像をそのまま使用</li>
+      <li>フォント（数字・日本語）：M PLUS Rounded 1c（Google Fonts、SIL Open Font License）</li>
+      <li>効果音・ジングルの一部：Kenney「UI Audio / Interface Sounds / Music Jingles」（CC0）ogg音声</li>
+      <li>紙吹雪：canvas-confetti（ISC）、アニメーション：GSAP（外部JSライブラリ）</li>
+      <li>アプリアイコン：Twemoji（CC-BY 4.0）PNG画像</li>
+    </ul>
+    <h3>🛠️ おちゃが自分で作ったもの（ご希望どおり明記します）</h3>
+    <ul>
+      <li>ゲームのルール・数値・セリフ等のゲームロジック（JavaScript）</li>
+      <li>お店図鑑・呼び込み長押し連打・建物のレベル成長演出などの追加機能</li>
+      <li>タップ音・回収音などのシンセサイザー効果音（WebAudioで生成する自作サウンド）</li>
+      <li>デイリーボーナスのカレンダー表示（CSSで自作・実際の日付を表示）</li>
+      <li>3Dシーンの中で外部モデルを並べる配置・カメラ・タップ判定・昼夜サイクルのコード（モデル自体は上記の外部素材です）</li>
+      <li>外部素材の配置・組み合わせと、色や余白などのCSSによる調整（素材そのものは外部素材です）</li>
+      <li>Androidアプリの外枠（WebView表示用のJavaコード）とビルド設定・スクリプト</li>
+      <li>モーダルが画面外にずれて閉じられなくなる不具合の修正（モーダル類の配置変更・フィーバー中の filter 廃止）</li>
+      <li>v10の改善（大きな金庫の上限不具合修正・ガチャ/宝箱の進行度連動バランス・24時間営業の追加・実績2件追加・転生時の実績/連続ログイン保持）</li>
+      <li>v11の改善（称号の常駐表示・連打マイルストーンボーナスと実績2件追加・フィーバーボタンのヒント文言）</li>
+      <li>v12の改善（新全体強化「SNSバズ」：タップでたまに10秒間生産2倍・次の目標が未解放エリアのときは解放条件の進捗を目標バナーに表示・フィーバーボタンのタップ効果を数字で表示）</li>
+      <li>v13の改善（初回無料の抜け穴修正：無料はコーヒースタンドだけに限定し、高額店を初手でタダ建てできなくした・旧セーブの統計欠けでNaNになる問題の移行補正・転生時にクエスト進行を保持・バックグラウンド復帰時の生産取りこぼし軽減（90%・最大28時間）・詳細パネルに生産/秒と次のLvの効果プレビュー追加・お店が建てられるようになった瞬間のお知らせ・フィーバーボタンのクールダウン表示・売上ゼロの店をタップした時の理由表示・実績/クエスト報酬のランク判定漏れ修正・HUDの重なり対策・3Dの車の重なり修正と起動時は昼から開始・ゆめタウンの建物に大きさ/向きの差を追加）</li>
+      <li>v14の改善（デザイン全面刷新：Kenney画像ボタンから自作CSSの光沢グラデーションボタンへ差し替え・HUDを濃紺＋金グラデーション文字に・パネル／リスト／お店カードを金枠カードUIに統一）</li>
+      <li>v15の改善（宝箱・ガチャ・デイリー・おかえり報酬を earn 経由にしてランク判定漏れを修正・HUD称号が省略されないようレイアウト調整・3Dの空き地に店名＋価格の自作キャンバスラベル表示・実績に進捗バー追加・図鑑に生産/秒とエリア未解放表示・詳細に次の実績節目までの残りLv表示・まとめて回収ボタンに軒数表示・宝箱が消えた時のお知らせ・モーダルの表示待ち上限を拡大・お店の10Lvまとめて強化ボタン追加・コンボ表示に倍率追加・全体強化カードに現在の効果表示・エリアタブに建設済み軒数表示・pagehideでもセーブ）</li>
+      <li>v16の改善（目標バナーに次のお店までの目安時間と「回収すれば建てられる」表示・詳細パネルにストック満タンまでの残り時間・まとめて強化ボタンの表示を「今買えるLv数と合計金額」に実態合わせ・実績リストを進捗率の高い順に並べ替え・行列イベントの予告カウントダウン・まとめて回収ボタンが貯まると光る演出・3Dの建物に自作キャンバスのLvバッジ表示）</li>
+    </ul>
+    <button id="creditsClose" class="kenney-btn green big">閉じる</button>
+    <button id="resetBtn" class="danger">セーブデータを消す</button>
+  </div>
+</div>
+
+<script src="libs/confetti.browser.min.js"></script>
+<script src="libs/gsap.min.js"></script>
+<script src="libs/three.min.js"></script>
+<script src="libs/GLTFLoader.js"></script>
+<script src="three3d.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
