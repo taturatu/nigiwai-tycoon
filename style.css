@@ -37,7 +37,10 @@ body { font-family:'MPlusRounded','Hiragino Maru Gothic ProN','Hiragino Sans',sa
 #perSec { font-size:11.5px; opacity:.92; margin-top:3px; white-space:nowrap; }
 .star-box { display:flex; align-items:center; gap:3px; font-family:'MPlusRounded',sans-serif; font-size:15px; color:#ffe97a;
   background:rgba(255,255,255,.14); border-radius:99px; padding:4px 8px; flex:none; }
-#rankBox { font-size:11px; max-width:136px; overflow:hidden; padding:4px 6px; }
+#rankBox { font-size:10.5px; max-width:152px; overflow:hidden; padding:4px 6px; }
+#upBadge { color:#ffdf5e; font-size:11px; }
+.chest.urgent { animation:chestUrgent .18s infinite alternate; }
+@keyframes chestUrgent { from{ transform:scale(1); filter:drop-shadow(0 0 12px gold); } to{ transform:scale(1.18); filter:drop-shadow(0 0 18px #ff3b30); } }
 #rankName { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 /* 狭い画面ではHUDが重ならないよう少し詰める（v13：コイン・スター・称号・ボタンの重なり対策） */
 @media (max-width: 380px) {

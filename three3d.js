@@ -299,7 +299,7 @@ window.T3D = (function () {
       plotGroups[shop.id] = rec;
       if (built) addBuilding(rec, false);
       else {
-        makeSprite(shop.icon, false, 1.15).then(sp => {
+        makeSprite(shop.icon, true, 0.95).then(sp => {
           if (!sp || plotGroups[shop.id] !== rec) return;
           sp.position.set(0, 1.35, 0);
           group.add(sp); rec.icon = sp;
@@ -410,6 +410,7 @@ window.T3D = (function () {
     rec.coin.visible = ratio > 0.02;
     const s = 0.45 + Math.min(1, ratio) * 0.8;
     rec.coin.scale.set(s, s, 1);
+    rec.coinBaseScale = s;
     rec.coin.material.color.set(full ? 0xffd93b : 0xffffff);
     rec.stockFull = !!full;
   }
@@ -570,7 +571,7 @@ window.T3D = (function () {
     // プロットの動き
     Object.values(plotGroups).forEach((r, i) => {
       if (r.totem && r.building) { r.totem.rotation.y += dt * 1.1; r.totem.position.y = r.bHeight + 0.85 + Math.sin(t * 2 + r.phase) * 0.08; }
-      if (r.coin && r.coin.visible) r.coin.position.y = r.bHeight * 0.55 + 0.5 + Math.sin(t * 3 + r.phase) * 0.09;
+      if (r.coin && r.coin.visible) { r.coin.position.y = r.bHeight * 0.55 + 0.5 + Math.sin(t * 3 + r.phase) * 0.09; if (r.stockFull && r.coinBaseScale) { const ps = r.coinBaseScale * (1 + 0.18 * Math.sin(t * 6 + r.phase)); r.coin.scale.set(ps, ps, 1); } }
       if (r.lvBadge) r.lvBadge.position.y = r.bHeight + 0.32 + Math.sin(t * 3 + r.phase + 1.5) * 0.09;
       if (!r.builtFlag && r.icon) r.icon.position.y = 1.35 + Math.sin(t * 2.2 + r.phase) * 0.1;
       if (!r.builtFlag && r.label) r.label.position.y = 2.45 + Math.sin(t * 2.2 + r.phase) * 0.1;

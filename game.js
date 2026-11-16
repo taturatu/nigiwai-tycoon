@@ -105,8 +105,8 @@ function load() {
     if (raw) { const d = JSON.parse(raw); if (d && typeof d === 'object') S = Object.assign(defaultState(), d); }
   } catch (e) {}
   SHOPS.forEach(s => {
-    if (typeof S.lv[s.id] !== 'number') S.lv[s.id] = 0;
-    if (typeof S.stock[s.id] !== 'number') S.stock[s.id] = 0;
+    if (typeof S.lv[s.id] !== 'number' || !isFinite(S.lv[s.id]) || S.lv[s.id] < 0) S.lv[s.id] = 0;
+    if (typeof S.stock[s.id] !== 'number' || !isFinite(S.stock[s.id]) || S.stock[s.id] < 0) S.stock[s.id] = 0;
   });
   if (!S.daily || typeof S.daily !== 'object') S.daily = { last: '', streak: 0 };
   if (!S.ach || typeof S.ach !== 'object') S.ach = {};
@@ -175,7 +175,7 @@ function fmtEta(sec) {
 }
 function upCost(up) { return Math.ceil(up.baseCost * Math.pow(up.growth, S.ups[up.id])); }
 function autoRate() { return Math.min(1, S.ups.staff * 0.1); }
-let combo = 0, lastTapAt = 0, feverBoostReadyAt = 0, lastEmptyTapAt = 0;
+let combo = 0, lastTapAt = 0, feverBoostReadyAt = 0, lastEmptyTapAt = 0, gachaCdSeen = null;
 const affordState = {}; let affordInit = false; // 「建てられるようになった」お知らせ用（セーブには保存しない）
 function comboMult() { return 1 + Math.min(combo, 100) * 0.02; }
 function critRate() { return 0.07 + (S.ups.crit || 0) * 0.03; }
@@ -673,7 +673,10 @@ function refreshDetail() {
     $('detailSub').innerHTML = '<div class="sub-line">売上ストック <b>' + fmt(S.stock[shop.id]) + '</b> / ' + fmt(capNow) + '</div>' +
       '<div class="sub-line">1回 +' + fmt(batchOf(shop)) + '（' + shop.cycle + '秒ごと）・生産 +' + fmt(rateOf(shop)) + '/秒</div>' +
       '<div class="sub-line">次のLvで 1回 +' + fmt(batchOf(shop) * 1.6) + '（+60%）</div>' + fullLine + mileLine;
-    $('collectBtn').innerHTML = '回収する<br>+' + fmt(Math.floor(S.stock[shop.id]));
+    const cAmt = Math.floor(S.stock[shop.id]);
+    const cFull = S.stock[shop.id] >= capNow * 0.999 && cAmt >= 1;
+    const cGrand = cAmt + (cFull ? Math.ceil(cAmt * 0.20) : 0);
+    $('collectBtn').innerHTML = cFull ? '回収する<br>+' + fmt(cGrand) + '（満タン+20%）' : '回収する<br>+' + fmt(cAmt);
     $('collectBtn').disabled = S.stock[shop.id] < 1;
     $('collectBtn').classList.toggle('ready-glow', S.stock[shop.id] >= capNow * 0.999); // 満タンなら回収ボタンを光らせる（v17）
     $('upgradeBtn').innerHTML = '強化する<br>' + fmt(shopUpCost(shop));
@@ -687,7 +690,7 @@ function refreshDetail() {
     }
   } else {
     $('detailName').textContent = shop.name + '（空き地）';
-    $('detailSub').innerHTML = (buildCost(shop) === 0 ? '建設費 <b>無料（初回だけ！）</b>' : '建設費 ' + fmt(buildCost(shop))) + '　|　建てると ' + shop.cycle + '秒ごとに +' + fmt(shop.batch * globalMult()) + ' の売上がたまる';
+    $('detailSub').innerHTML = (buildCost(shop) === 0 ? '建設費 <b>無料（初回だけ！）</b>' : '建設費 ' + fmt(buildCost(shop))) + '　|　建てると ' + shop.cycle + '秒ごとに +' + fmt(shop.batch * globalMult()) + ' の売上がたまる（生産 +' + fmt(shop.batch * globalMult() / shop.cycle) + '/秒）';
     $('collectBtn').textContent = 'まだ建っていない';
     $('collectBtn').disabled = true;
     $('collectBtn').classList.remove('ready-glow');
@@ -731,7 +734,11 @@ function refreshAll() {
   const hitShops = SHOPS.filter(s => Math.floor(S.stock[s.id] || 0) >= 1).length;
   // 満タンの店がある時はボタンにも出して回収を促す（満タン中は生産が止まる＝損なため・v18）
   const fullShops = SHOPS.filter(s => S.lv[s.id] > 0 && stockCap(s) > 0 && (S.stock[s.id] || 0) >= stockCap(s) * 0.999).length;
-  ca.innerHTML = '💰 まとめて回収（' + hitShops + '軒） +' + fmt(ts) + (fullShops ? ' 🔔満タン' + fullShops + '軒！' : '');
+  // ボーナス見込み（まとめ+10%・満タン+20%）を押す前に見せる。計算は collectAll と揃える（v19）
+  let pvFullBonus = 0;
+  SHOPS.forEach(s => { const a = Math.floor(S.stock[s.id] || 0); if (a > 0 && S.lv[s.id] > 0 && a >= stockCap(s) * 0.999) pvFullBonus += Math.ceil(a * 0.20); });
+  const pvBonus = (hitShops >= 2 ? Math.ceil(ts * 0.10) : 0) + pvFullBonus;
+  ca.innerHTML = '💰 まとめて回収（' + hitShops + '軒） +' + fmt(ts) + (pvBonus > 0 ? ' ボーナス+' + fmt(pvBonus) + '！' : '') + (fullShops ? ' 🔔満タン' + fullShops + '軒！' : '');
   ca.disabled = ts < 1;
   // 光るしきい値は進行度連動：固定500だと序盤（ストック上限36等）では永遠に光らなかった（v17）
   const capTotal = SHOPS.reduce((t, s) => t + (S.lv[s.id] > 0 ? stockCap(s) : 0), 0);
@@ -813,7 +820,7 @@ function refreshAll() {
   // クエスト
   const q = questNow();
   const prog = Math.min(questProgress(), q.target);
-  $('questText').textContent = q.label + '（' + fmt(prog) + ' / ' + fmt(q.target) + (q.target ? '・' + Math.floor(prog / q.target * 100) + '%' : '') + '）';
+  $('questText').textContent = q.label + '（' + fmt(prog) + ' / ' + fmt(q.target) + (q.target ? '・' + Math.floor(prog / q.target * 100) + '%' : '') + (prog < q.target ? '・あと' + fmt(q.target - prog) : '') + '）';
   $('questReward').textContent = 'ごほうび +' + fmt(questRewardCoins());
   $('questFill').style.width = (q.target ? prog / q.target * 100 : 100) + '%';
   // 全体強化ボタン
@@ -831,6 +838,16 @@ function refreshAll() {
   const cd = Math.max(0, Math.ceil((S.gachaReadyAt - Date.now()) / 1000));
   $('gachaCd').textContent = cd > 0 ? 'あと ' + cd + ' 秒' : 'まわせる！';
   $('gachaBtn').disabled = cd > 0;
+  // ガチャが回せるようになった瞬間だけ知らせる（起動直後の初期表示では鳴らさない・v19）
+  if (gachaCdSeen === null) gachaCdSeen = cd > 0;
+  else if (gachaCdSeen && cd === 0) { gachaCdSeen = false; toast('🎰 ラッキーガチャが回せるよ！'); play('open'); }
+  else if (cd > 0) gachaCdSeen = true;
+  // 全体強化タブの「買える強化あり」バッジ（v19）
+  const upBadge = $('upBadge');
+  if (upBadge) {
+    const affordUps = UPGRADES.filter(u => !(u.max && S.ups[u.id] >= u.max) && S.coins >= upCost(u)).length;
+    upBadge.textContent = affordUps > 0 && bottomTab !== 'upgrades' ? '✨' + affordUps : '';
+  }
   refreshDetail();
 }
 
@@ -1211,6 +1228,7 @@ function tick() {
   }
   // 宝箱
   if (!chestState.active && now >= chestState.nextAt) spawnChest();
+  if (chestState.active && chestState.el) chestState.el.classList.toggle('urgent', chestState.until - now < 4000);
   if (chestState.active && now > chestState.until) { removeChest(); toast('🎁 宝箱は消えてしまった…またの出現を待とう'); }
   checkAch();
   refreshAll();
@@ -1292,8 +1310,8 @@ $('upgradeBtn').addEventListener('click', upgradeSelected);
 $('upgrade10Btn').addEventListener('click', upgradeSelected10);
 $('gachaBtn').addEventListener('click', spinGacha);
 $('feverInfoBtn').addEventListener('click', () => {
-  if (isFever()) { play('error'); return; } // FEVER中は押しても何も起きないことが分かるよう音で返す
-  if (Date.now() < feverBoostReadyAt) { play('error'); return; }
+  if (isFever()) { play('error'); const r0 = $('feverInfoBtn').getBoundingClientRect(); floatNumAt(r0.left + r0.width / 2 - 34, r0.top - 8, 'FEVER中！あと' + Math.ceil((S.feverUntil - Date.now()) / 1000) + '秒', false); return; }
+  if (Date.now() < feverBoostReadyAt) { play('error'); const r1 = $('feverInfoBtn').getBoundingClientRect(); floatNumAt(r1.left + r1.width / 2 - 34, r1.top - 8, 'おやすみ中 あと' + Math.ceil((feverBoostReadyAt - Date.now()) / 1000) + '秒', false); return; }
   feverBoostReadyAt = Date.now() + 15000;
   addFever(10); play('open'); shake(3);
   const r = $('feverInfoBtn').getBoundingClientRect();
