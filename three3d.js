@@ -60,6 +60,7 @@ window.T3D = (function () {
   let cars = [];
   let onTap = null;
   let lastInteract = Date.now();
+  let selectedShopId = null;
   let ready = false;
   const loader = new THREE.GLTFLoader();
   const modelCache = {}; // file -> Promise<THREE.Object3D template>
@@ -278,12 +279,14 @@ window.T3D = (function () {
       const group = new THREE.Group();
       group.position.set(pos.x, 0, pos.z);
       const built = isBuilt(shop);
-      const pad = new THREE.Mesh(new THREE.CylinderGeometry(1.32, 1.45, 0.22, 24),
+      // パッドは少し小さめにして地面（街タイル）が見えるようにする。大きすぎると
+      // 黄色い円盤だらけで「建物が増えていく街」に見えなかった（v17）
+      const pad = new THREE.Mesh(new THREE.CylinderGeometry(1.16, 1.28, 0.22, 24),
         new THREE.MeshStandardMaterial({ color: built ? 0xb8c2cc : 0xffd94d, roughness: 0.7, emissive: built ? 0x000000 : 0xaa7700, emissiveIntensity: built ? 0 : 0.35 }));
       pad.position.y = 0.11; pad.receiveShadow = true;
       group.add(pad);
       // 選択リング
-      const ring = new THREE.Mesh(new THREE.RingGeometry(1.5, 1.72, 32),
+      const ring = new THREE.Mesh(new THREE.RingGeometry(1.34, 1.54, 32),
         new THREE.MeshBasicMaterial({ color: 0xff5722, transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
       ring.rotation.x = -Math.PI / 2; ring.position.y = 0.06; ring.visible = false;
       group.add(ring);
@@ -299,8 +302,12 @@ window.T3D = (function () {
           group.add(sp); rec.icon = sp;
         });
         if (getLabel) {
-          const label = makeLabelSprite(shop.name, getLabel(shop));
-          if (label) { label.position.set(0, 2.45, 0); group.add(label); rec.label = label; }
+          const lt = getLabel(shop); // 空文字ならラベルを出さない（出す対象の絞り込みは game.js 側・v17）
+          rec.labelText = lt || '';
+          if (lt) {
+            const label = makeLabelSprite(shop.name, lt);
+            if (label) { label.position.set(0, 2.45, 0); group.add(label); rec.label = label; }
+          }
         }
       }
     });
@@ -403,6 +410,19 @@ window.T3D = (function () {
     rec.stockFull = !!full;
   }
 
+  // 空き地ラベルの付け外し（所持金や次の目標が変わった時に game.js から呼ぶ・v17）
+  function setLabel(shopId, name, text) {
+    const rec = plotGroups[shopId];
+    if (!rec || rec.builtFlag) return;
+    if ((rec.labelText || '') === (text || '')) return;
+    rec.labelText = text || '';
+    if (rec.label) { rec.group.remove(rec.label); rec.label = null; }
+    if (text) {
+      const label = makeLabelSprite(name, text);
+      if (label) { label.position.set(0, 2.45, 0); rec.group.add(label); rec.label = label; }
+    }
+  }
+
   function setAfford(shopId, afford) {
     const rec = plotGroups[shopId];
     if (!rec || rec.builtFlag) return;
@@ -410,6 +430,7 @@ window.T3D = (function () {
   }
 
   function highlight(shopId) {
+    selectedShopId = shopId || null; // 選択中は自動回転を止める（選んだ店が画面端へ流れていくのを防ぐ・v17）
     Object.values(plotGroups).forEach(r => { r.ring.visible = (r.shop.id === shopId); });
   }
 
@@ -527,7 +548,7 @@ window.T3D = (function () {
       Object.values(plotGroups).forEach(r => { if (r.building) applyBuildingGlow(r); });
     }
     // カメラ（しばらく触らなければゆっくり自動回転）
-    if (Date.now() - lastInteract > 5000) targetAz += dt * 0.045;
+    if (Date.now() - lastInteract > 5000 && !selectedShopId) targetAz += dt * 0.045;
     azimuth += (targetAz - azimuth) * 0.06;
     polar += (targetPolar - polar) * 0.06;
     camera.position.set(
@@ -555,6 +576,6 @@ window.T3D = (function () {
     renderer.render(scene, camera);
   }
 
-  return { init, buildDistrict, refreshShop, setStock, setAfford, setLevel, highlight, project, resize,
+  return { init, buildDistrict, refreshShop, setStock, setAfford, setLabel, setLevel, highlight, project, resize,
     get ready() { return ready; } };
 })();

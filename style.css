@@ -50,13 +50,13 @@ body { font-family:'MPlusRounded','Hiragino Maru Gothic ProN','Hiragino Sans',sa
 .fever-row { display:flex; align-items:center; gap:7px; margin-top:7px; font-size:12px; font-weight:800; }
 #feverLabel { white-space:nowrap; flex:none; font-size:11.5px; }
 .fever-row .bar-track { min-width:48px; }
-#buffLabel { color:#8ef58a; font-size:11.5px; white-space:nowrap; flex:none; }
+#buffLabel { color:#8ef58a; font-size:11px; white-space:nowrap; flex:none; }
 body.fever #hud { border-bottom-color:#ff512f; }
 body.fever #feverLabel { color:#ffb52e; }
 
 /* 目標バナー */
 #goalBanner { display:flex; align-items:center; gap:8px; margin:8px 10px 0; font-size:12.5px; font-weight:800; color:#33506e; }
-#goalText { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:66%; }
+#goalText { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:74%; }
 
 /* エリアタブ */
 #districtTabs { display:flex; gap:5px; margin:9px 8px 0; }
@@ -117,7 +117,7 @@ body.fever #feverLabel { color:#ffb52e; }
 .detail-info { flex:1; min-width:0; }
 #detailName { font-weight:900; font-size:15.5px; }
 #detailSub { font-size:11.5px; color:#5a6672; margin-top:1px; line-height:1.45; }
-#detailSub .sub-line { white-space:nowrap; }
+#detailSub .sub-line { white-space:normal; }
 #detailFlavor { font-size:11.5px; color:#8a6d1f; margin-top:2px; line-height:1.45; font-style:italic;
   display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 .detail-btns { display:flex; flex-direction:column; gap:6px; flex:none; }
@@ -126,7 +126,7 @@ body.fever #feverLabel { color:#ffb52e; }
 /* アクション行 */
 #actionRow { position:relative; display:flex; align-items:flex-end; justify-content:space-between; margin:12px 14px 0; }
 #gachaBtn, #feverInfoBtn { width:96px; height:74px; font-size:12px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; padding:6px; }
-.btn-icon { width:22px; height:22px; }
+.btn-icon { width:26px; height:26px; }
 #gachaCd { font-size:10.5px; font-family:'MPlusRounded',sans-serif; }
 #tapBtn { width:132px; height:132px; border-radius:50%; border:5px solid #fff; flex:none;
   background:radial-gradient(circle at 35% 30%, #ffe259, #ffa751);
@@ -259,6 +259,9 @@ body { background:linear-gradient(180deg,#274b73 0%,#5ea9dd 26%,#aee3ff 52%,#ffe
 .dtab-count { font-size:10px; opacity:.92; font-weight:800; }
 .detail-btns .kenney-btn { min-height:40px; padding:7px 10px; }
 
+/* ===== v17 改善（自作CSS）：詳細パネルの折り返し許可は #detailSub .sub-line を normal に変更、
+   ready-glow の対象に詳細の回収ボタンも追加、ボタンアイコン拡大・HUD/目標バナーの文字詰め ===== */
+
 /* ===== v16 改善（自作CSS） ===== */
-#collectAllBtn.ready-glow { animation:collectGlow .55s infinite alternate; }
+#collectAllBtn.ready-glow, #collectBtn.ready-glow { animation:collectGlow .55s infinite alternate; }
 @keyframes collectGlow { from{ box-shadow:inset 0 1px 0 rgba(255,255,255,.5), inset 0 -3px 0 rgba(0,0,0,.18), 0 4px 10px rgba(10,25,45,.35); } to{ box-shadow:inset 0 1px 0 rgba(255,255,255,.5), inset 0 -3px 0 rgba(0,0,0,.18), 0 0 24px 7px rgba(255,200,40,.9); } }

@@ -279,7 +279,10 @@ function nextModal() {
 }
 // 画面上部の小さなお知らせ（実績など、操作を止めない表示）
 let toastTimer = null;
-function toast(text) {
+function toast(text, retry) {
+  // モーダル表示中はモーダルと重なって読みにくいため、閉じるまで少し待ってから出す（v17）
+  const modalOpen = !document.getElementById('modal').classList.contains('hidden');
+  if (modalOpen && (retry || 0) < 15) { setTimeout(() => toast(text, (retry || 0) + 1), 1200); return; }
   const el = $('toast');
   el.textContent = text;
   el.classList.remove('hidden');
@@ -522,7 +525,13 @@ function buildPlots() {
     Object.keys(plotRefs).forEach(k => delete plotRefs[k]);
     const shops = SHOPS.filter(s => s.d === district);
     shops.forEach(shop => { plotRefs[shop.id] = { el: makeProxyEl(shop), fill: null, num: null, price: null }; });
-    T3D.buildDistrict(shops, s => S.lv[s.id] > 0, s => (buildCost(s) === 0 ? '初回無料！' : fmt(buildCost(s)) + ' コイン'));
+    // 空き地ラベルは「次に建てる最安の店」と「今すぐ建てられる店」だけに出す。
+    // 全店に出すと3D上でラベル同士が重なって読めず、街の見た目も騒がしくなっていた（v17）
+    T3D.buildDistrict(shops, s => S.lv[s.id] > 0, s => {
+      const next = cheapestUnbuilt(district);
+      if (!next || (next.id !== s.id && S.coins < buildCost(s))) return '';
+      return buildCost(s) === 0 ? '初回無料！' : fmt(buildCost(s)) + ' コイン';
+    });
     if (selectedId) T3D.highlight(selectedId);
     refreshLockOverlay();
     return;
@@ -659,6 +668,7 @@ function refreshDetail() {
       '<div class="sub-line">次のLvで 1回 +' + fmt(batchOf(shop) * 1.6) + '（+60%）</div>' + fullLine + mileLine;
     $('collectBtn').innerHTML = '回収する<br>+' + fmt(Math.floor(S.stock[shop.id]));
     $('collectBtn').disabled = S.stock[shop.id] < 1;
+    $('collectBtn').classList.toggle('ready-glow', S.stock[shop.id] >= capNow * 0.999); // 満タンなら回収ボタンを光らせる（v17）
     $('upgradeBtn').innerHTML = '強化する<br>' + fmt(shopUpCost(shop));
     $('upgradeBtn').disabled = S.coins < shopUpCost(shop);
     const b10 = $('upgrade10Btn');
@@ -673,6 +683,7 @@ function refreshDetail() {
     $('detailSub').innerHTML = (buildCost(shop) === 0 ? '建設費 <b>無料（初回だけ！）</b>' : '建設費 ' + fmt(buildCost(shop))) + '　|　建てると ' + shop.cycle + '秒ごとに +' + fmt(shop.batch * globalMult()) + ' の売上がたまる';
     $('collectBtn').textContent = 'まだ建っていない';
     $('collectBtn').disabled = true;
+    $('collectBtn').classList.remove('ready-glow');
     $('upgradeBtn').innerHTML = buildCost(shop) === 0 ? '建てる<br>初回無料！' : '建てる<br>' + fmt(buildCost(shop));
     $('upgradeBtn').disabled = S.coins < buildCost(shop);
     const b10e = $('upgrade10Btn');
@@ -713,7 +724,9 @@ function refreshAll() {
   const hitShops = SHOPS.filter(s => Math.floor(S.stock[s.id] || 0) >= 1).length;
   ca.innerHTML = '💰 まとめて回収（' + hitShops + '軒） +' + fmt(ts);
   ca.disabled = ts < 1;
-  ca.classList.toggle('ready-glow', ts >= 500); // たっぷり貯まったら光って知らせる
+  // 光るしきい値は進行度連動：固定500だと序盤（ストック上限36等）では永遠に光らなかった（v17）
+  const capTotal = SHOPS.reduce((t, s) => t + (S.lv[s.id] > 0 ? stockCap(s) : 0), 0);
+  ca.classList.toggle('ready-glow', ts >= Math.max(10, Math.min(500, capTotal * 0.5)));
   [0, 1, 2].forEach(d => {
     const el = $('dCount' + d);
     if (el) el.textContent = ' ' + SHOPS.filter(s => s.d === d && S.lv[s.id] > 0).length + '/12';
@@ -767,7 +780,15 @@ function refreshAll() {
         const cap3 = stockCap(shop);
         T3D.setStock(shop.id, S.stock[shop.id] / Math.max(1, cap3), S.stock[shop.id] >= cap3 * 0.99);
         if (T3D.setLevel) T3D.setLevel(shop.id, S.lv[shop.id]); // レベルで建物が育つ
-      } else T3D.setAfford(shop.id, S.coins >= buildCost(shop));
+      } else {
+        T3D.setAfford(shop.id, S.coins >= buildCost(shop));
+        // 空き地ラベルは所持金の変化に追随させる（建てられるようになった店にだけ付け直す・v17）
+        if (T3D.setLabel) {
+          const nextU = cheapestUnbuilt(district);
+          const showL = !!nextU && (nextU.id === shop.id || S.coins >= buildCost(shop));
+          T3D.setLabel(shop.id, shop.name, showL ? (buildCost(shop) === 0 ? '初回無料！' : fmt(buildCost(shop)) + ' コイン') : '');
+        }
+      }
     }
     const ref = plotRefs[shop.id]; if (!ref) return;
     const lv = S.lv[shop.id];
@@ -783,7 +804,7 @@ function refreshAll() {
   // クエスト
   const q = questNow();
   const prog = Math.min(questProgress(), q.target);
-  $('questText').textContent = q.label + '（' + fmt(prog) + ' / ' + fmt(q.target) + '）';
+  $('questText').textContent = q.label + '（' + fmt(prog) + ' / ' + fmt(q.target) + (q.target ? '・' + Math.floor(prog / q.target * 100) + '%' : '') + '）';
   $('questReward').textContent = 'ごほうび +' + fmt(questRewardCoins());
   $('questFill').style.width = (q.target ? prog / q.target * 100 : 100) + '%';
   // 全体強化ボタン
@@ -858,14 +879,18 @@ function collectAll() {
     if (a > 0) { S.stock[shop.id] = 0; total += a; shopsHit++; }
   });
   if (total < 1) { play('error'); return; }
-  S.stats.collects += shopsHit; S.stats.collectCoins += total;
-  earn(total);
+  // まとめ回収ボーナス：2軒以上を一気に回収すると合計の10%を上乗せ（変動報酬の強化・v17）
+  const bonus = shopsHit >= 2 ? Math.ceil(total * 0.10) : 0;
+  const grand = total + bonus;
+  S.stats.collects += shopsHit; S.stats.collectCoins += grand;
+  earn(grand);
   play('collect', 1); synth('collect'); buzz(20);
   addFever(Math.min(14, 2 + shopsHit));
   const m = $('map').getBoundingClientRect();
   flyCoins({ getBoundingClientRect: () => ({ left: m.left + m.width / 2 - 20, top: m.top + m.height / 2, width: 40, height: 20 }) }, 8);
-  floatNumAt(m.left + m.width / 2 - 50, m.top + 30, 'まとめて +' + fmt(total), total > 100000);
-  if (total > 100000) { synth('fanfare'); fireConfetti({ particleCount: 50, spread: 90, origin: { y: 0.4 } }); }
+  floatNumAt(m.left + m.width / 2 - 50, m.top + 30, 'まとめて +' + fmt(grand) + (bonus ? '（ボーナス+' + fmt(bonus) + '！）' : ''), grand > 100000);
+  if (grand > 100000 || shopsHit >= 3) { synth('fanfare'); fireConfetti({ particleCount: 50, spread: 90, origin: { y: 0.4 } }); }
+  else if (bonus > 0) fireConfetti({ particleCount: 26, spread: 60, origin: { y: 0.45 } });
   checkQuest(); save(); refreshAll();
 }
 function upgradeSelected() {
