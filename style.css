@@ -53,7 +53,7 @@ body { font-family:'MPlusRounded','Hiragino Maru Gothic ProN','Hiragino Sans',sa
 .fever-row { display:flex; align-items:center; gap:7px; margin-top:7px; font-size:12px; font-weight:800; }
 #feverLabel { white-space:nowrap; flex:none; font-size:11.5px; }
 .fever-row .bar-track { min-width:48px; }
-#buffLabel { color:#8ef58a; font-size:10.5px; white-space:nowrap; flex:none; }
+#buffLabel { color:#8ef58a; font-size:10.5px; white-space:nowrap; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; text-align:right; }
 body.fever #hud { border-bottom-color:#ff512f; }
 body.fever #feverLabel { color:#ffb52e; }
 
@@ -282,6 +282,19 @@ body.fever #tapBtn { animation:tapFeverGlow .5s infinite alternate; }
 @keyframes tapFeverGlow { from{ box-shadow:0 9px 0 #d17c06, 0 16px 26px rgba(0,0,0,.3), 0 0 16px rgba(255,120,0,.65); } to{ box-shadow:0 9px 0 #d17c06, 0 16px 26px rgba(0,0,0,.3), 0 0 34px rgba(255,60,0,.95); } }
 .zukan-card { cursor:pointer; }
 .zukan-card:active { transform:scale(.98); }
+
+/* ===== v22 改善（自作CSS）：次のランク表示、フィーバーあと少しの脈動、ガチャの発光、
+   実績あと少し・図鑑で建てられる店の金枠、宝箱の残り秒数ラベル ===== */
+#rankProg { display:block; font-size:9px; opacity:.85; white-space:nowrap; }
+@media (max-width: 380px) { #rankProg { display:none; } }
+body.fever-almost #feverFill { animation:feverAlmost .45s infinite alternate; }
+@keyframes feverAlmost { from{ filter:brightness(1); } to{ filter:brightness(1.7) drop-shadow(0 0 6px #ff8a00); } }
+body.fever-almost #feverLabel { color:#ff8a00; }
+#gachaBtn.ready-glow { animation:collectGlow .55s infinite alternate; }
+.ach-card.almost { border-color:#e8a812; box-shadow:0 0 0 2px rgba(255,200,40,.55), 0 3px 10px rgba(30,40,10,.14); }
+.ach-card.afford { border-color:#e8a812; box-shadow:0 0 0 2.5px #ffd93b, 0 3px 10px rgba(30,40,10,.14); }
+.chest-timer { position:absolute; transform:translate(-4px,-20px); background:rgba(20,20,30,.88); color:#ffd93b;
+  font-size:11px; font-weight:900; border-radius:99px; padding:2px 8px; pointer-events:none; z-index:8; white-space:nowrap; }
 
 /* ===== v16 改善（自作CSS） ===== */
 #collectAllBtn.ready-glow, #collectBtn.ready-glow { animation:collectGlow .55s infinite alternate; }

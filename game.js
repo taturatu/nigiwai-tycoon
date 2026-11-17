@@ -93,7 +93,7 @@ let S = null;
 function defaultState() {
   return {
     coins: 0, runEarned: 0, lifetimeEarned: 0, rank: 0, stars: 0,
-    lv: {}, stock: {}, ups: { tap: 0, ad: 0, staff: 0, crit: 0 },
+    lv: {}, stock: {}, ups: { tap: 0, ad: 0, staff: 0, crit: 0, row: 0, chest: 0, quest: 0, vault: 0, night: 0, sns: 0 },
     stats: { taps: 0, collects: 0, collectCoins: 0, builds: 0, upgrades: 0, crits: 0, chests: 0, gachas: 0, fevers: 0, quests: 0, maxCombo: 0 },
     questIdx: 0, questBase: 0, fever: 0, feverUntil: 0, rushUntil: 0, nextRushAt: Date.now() + 80000,
     buffUntil: 0, buffMult: 1, buffKind: '', gachaReadyAt: 0, sound: true, lastSaved: Date.now(),
@@ -136,6 +136,10 @@ function load() {
   ['questIdx','questBase','gachaReadyAt','feverUntil','rushUntil','buffUntil','lastSaved'].forEach(k => {
     if (typeof S[k] !== 'number' || !isFinite(S[k]) || S[k] < 0) S[k] = 0;
   });
+  // ランク・スターの補正（壊れた値だと RANKS[S.rank] が undefined になり HUD 表示で落ちるため・v22）
+  S.stars = Math.floor(S.stars);
+  if (typeof S.rank !== 'number' || !isFinite(S.rank) || S.rank < 0 || S.rank >= RANKS.length) S.rank = rankOf(S.lifetimeEarned);
+  else S.rank = Math.floor(S.rank);
   S.questIdx = Math.floor(S.questIdx);
   if (typeof S.buffMult !== 'number' || !isFinite(S.buffMult) || S.buffMult < 1) S.buffMult = 1;
   if (typeof S.nextRushAt !== 'number' || !isFinite(S.nextRushAt) || S.nextRushAt <= 0) S.nextRushAt = Date.now() + 80000;
@@ -648,7 +652,8 @@ function buildAchList(list) {
     const now = Math.min(a.now(), a.target);
     const pct = Math.min(100, Math.floor(now / a.target * 100));
     const card = document.createElement('div');
-    card.className = 'ach-card' + (done ? ' done' : '');
+    // あと少し（80%以上）の実績は金枠で強調して、狙いどころを分かりやすくする（v22）
+    card.className = 'ach-card' + (done ? ' done' : (pct >= 80 ? ' almost' : ''));
     card.innerHTML =
       '<div class="ach-icon">' + a.icon + '</div>' +
       '<div class="ach-main"><div class="ach-name">' + a.name + '</div>' +
@@ -684,6 +689,8 @@ function buildZukanList(list) {
       // 図鑑のカードをタップすると、その店のエリアへ移動して選択する（図鑑で見た店を
       // そのままマップで回収・強化できるようにする・v21）
       card.classList.add('zukan-card');
+      // 今すぐ建てられる店は図鑑でも金枠で知らせる（v22）
+      if (lv === 0 && !districtLockedNow && S.coins >= buildCost(shop)) card.classList.add('afford');
       card.addEventListener('click', () => {
         if (districtLockedNow) { play('error'); return; }
         district = d; selectedId = shop.id;
@@ -741,10 +748,14 @@ function refreshDetail() {
     }
   } else {
     $('detailName').textContent = shop.name + '（空き地）';
-    const sfEl2 = $('detailStockFill');
-    if (sfEl2) { sfEl2.style.width = '0%'; sfEl2.classList.remove('full'); }
     // あとどれくらいで建てられるか（金額だけでは遠さが分からなかったため・v20）
     const bcost = buildCost(shop);
+    // 空き地ではバーを「建設費までの貯まり具合」として使う（従来は常に0%で無意味だった・v22）
+    const sfEl2 = $('detailStockFill');
+    if (sfEl2) {
+      sfEl2.style.width = (bcost === 0 ? 100 : Math.min(100, S.coins / bcost * 100)) + '%';
+      sfEl2.classList.toggle('full', bcost === 0 || S.coins >= bcost);
+    }
     const progLine = bcost === 0 ? '' : (S.coins >= bcost ? '　|　<b>今建てられる！</b>' : '　|　あと ' + fmt(bcost - S.coins) + ' コイン（' + Math.floor(S.coins / bcost * 100) + '%）');
     $('detailSub').innerHTML = (bcost === 0 ? '建設費 <b>無料（初回だけ！）</b>' : '建設費 ' + fmt(bcost)) + progLine + '　|　建てると ' + shop.cycle + '秒ごとに +' + fmt(shop.batch * globalMult()) + ' の売上がたまる（生産 +' + fmt(shop.batch * globalMult() / shop.cycle) + '/秒）';
     $('collectBtn').textContent = 'まだ建っていない';
@@ -772,6 +783,12 @@ function refreshAll() {
   // 称号は常駐表示（ランクアップの瞬間しか見えないのはもったいないため）
   const rn = $('rankName');
   if (rn) rn.textContent = RANKS[S.rank].name;
+  // 次のランクまでの残りも常駐表示する（称号だけでは目標が見えなかったため・v22）
+  const rp = $('rankProg');
+  if (rp) {
+    const nextRank = RANKS[S.rank + 1];
+    rp.textContent = nextRank ? '次まであと' + fmt(Math.max(0, nextRank.at - S.lifetimeEarned)) : '最高位！';
+  }
   $('tapValue').textContent = '+' + fmt(tapPower());
   $('starCount').textContent = S.stars;
   // フィーバー表示（FEVER中はボタンも「FEVER中！」にしないと「あと0」のままになる）
@@ -792,6 +809,8 @@ function refreshAll() {
   if (buffActive()) buffs.push((S.buffKind === 'buzz' ? 'バズ×' : 'ガチャ×') + S.buffMult + ' あと' + Math.max(0, Math.ceil((S.buffUntil - Date.now()) / 1000)) + '秒');
   $('buffLabel').textContent = buffs.join(' ');
   document.body.classList.toggle('fever', isFever());
+  // フィーバーまであと少し（80%以上）でゲージを脈動させて「あと少し！」を煽る（v22）
+  document.body.classList.toggle('fever-almost', !isFever() && S.fever >= 80);
   // 目標バナー（序盤はチュートリアル風ヒントを優先）
   const ca = $('collectAllBtn');
   const ts = totalStock();
@@ -909,6 +928,8 @@ function refreshAll() {
   const cd = Math.max(0, Math.ceil((S.gachaReadyAt - Date.now()) / 1000));
   $('gachaCd').textContent = cd > 0 ? 'あと ' + cd + ' 秒' : 'まわせる！';
   $('gachaBtn').disabled = cd > 0;
+  // 回せる時はボタンを光らせて気づけるようにする（v22）
+  $('gachaBtn').classList.toggle('ready-glow', cd === 0);
   // ガチャが回せるようになった瞬間だけ知らせる（起動直後の初期表示では鳴らさない・v19）
   if (gachaCdSeen === null) gachaCdSeen = cd > 0;
   else if (gachaCdSeen && cd === 0) { gachaCdSeen = false; toast('🎰 ラッキーガチャが回せるよ！'); play('open'); }
@@ -1085,6 +1106,9 @@ function doPrestige() {
   S.stars++;
   const keep = { stars: S.stars, stats: S.stats, lifetimeEarned: S.lifetimeEarned, rank: S.rank, sound: S.sound, gachaReadyAt: S.gachaReadyAt, ach: S.ach, daily: S.daily, questIdx: S.questIdx, questBase: S.questBase };
   const fresh = defaultState();
+  // 転生直後は load() の補正が通らないため、全体強化のキーが欠けるとコスト計算が NaN になる。
+  // defaultState を全強化ぶん揃えた上で、念のためここでも補正する（v22）
+  UPGRADES.forEach(u => { if (typeof fresh.ups[u.id] !== 'number') fresh.ups[u.id] = 0; });
   fresh.stars = keep.stars; fresh.stats = keep.stats; fresh.lifetimeEarned = keep.lifetimeEarned;
   fresh.rank = keep.rank; fresh.sound = keep.sound; fresh.gachaReadyAt = keep.gachaReadyAt;
   // 実績とデイリー連続記録は転生後も保持（旧コードは初期化で消え、実績の再達成で
@@ -1106,7 +1130,7 @@ function doPrestige() {
 // 180倍もの大当たりを生み、序盤スキップになっていた。進行度（生産レートかタップ力の
 // 大きい方）に連動させ、序盤は嬉しい額・中盤以降は従来通りのスケールにする。
 function rewardBase() { return Math.max(totalRate() / Math.max(1, multProd()), tapPower(), 1); }
-const chestState = { active: false, el: null, nextAt: Date.now() + 45000, until: 0 };
+const chestState = { active: false, el: null, timerEl: null, nextAt: Date.now() + 45000, until: 0 };
 function spawnChest() {
   const layer = $('chestLayer');
   const img = document.createElement('img');
@@ -1115,14 +1139,20 @@ function spawnChest() {
   img.style.top = (30 + Math.random() * 52) + '%';
   img.addEventListener('click', openChest);
   layer.appendChild(img);
-  chestState.active = true; chestState.el = img;
+  // 消えるまでの残り秒数を数字で出す（従来は最後4秒の点滅だけで、残り時間が読めなかった・v22）
+  const timer = document.createElement('div');
+  timer.className = 'chest-timer'; timer.textContent = '12秒';
+  timer.style.left = img.style.left; timer.style.top = img.style.top;
+  layer.appendChild(timer);
+  chestState.active = true; chestState.el = img; chestState.timerEl = timer;
   chestState.until = Date.now() + 12000;
   play('open');
   toast('🎁 宝箱が現れた！タップして開けよう');
 }
 function removeChest() {
   if (chestState.el) chestState.el.remove();
-  chestState.active = false; chestState.el = null;
+  if (chestState.timerEl) chestState.timerEl.remove();
+  chestState.active = false; chestState.el = null; chestState.timerEl = null;
   chestState.nextAt = Date.now() + (50000 + Math.random() * 50000) * Math.pow(0.8, S.ups.chest || 0);
 }
 function openChest() {
@@ -1303,6 +1333,7 @@ function tick() {
   if (chestState.active && !$('modal').classList.contains('hidden')) chestState.until += Math.round(rawDt * 1000);
   if (!chestState.active && now >= chestState.nextAt) spawnChest();
   if (chestState.active && chestState.el) chestState.el.classList.toggle('urgent', chestState.until - now < 4000);
+  if (chestState.active && chestState.timerEl) chestState.timerEl.textContent = Math.max(0, Math.ceil((chestState.until - now) / 1000)) + '秒';
   if (chestState.active && now > chestState.until) { removeChest(); toast('🎁 宝箱は消えてしまった…またの出現を待とう'); }
   checkAch();
   refreshAll();
@@ -1420,7 +1451,9 @@ $('resetBtn').addEventListener('click', () => {
     setTimeout(() => { resetArmed = false; $('resetBtn').textContent = 'セーブデータを消す'; }, 3500);
     return;
   }
-  localStorage.removeItem(SAVE_KEY); location.reload();
+  // バックアップも一緒に消す。メインだけ消すと、次回起動時に v21 の復旧機能が
+  // バックアップからセーブを復活させてしまい、リセットしたはずの街が戻ってくる（v22）
+  localStorage.removeItem(SAVE_KEY); localStorage.removeItem(SAVE_BACKUP_KEY); location.reload();
 });
 $('soundBtn').textContent = S.sound ? '🔊' : '🔇';
 setInterval(tick, 200);
