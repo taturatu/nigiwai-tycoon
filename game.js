@@ -87,6 +87,8 @@ const D3_UNLOCK_AT = 30000000000000;
 
 // ---------- 状態 ----------
 const SAVE_KEY = 'ochaTycoonSaveV2';
+const SAVE_BACKUP_KEY = 'ochaTycoonSaveV2_backup'; // メインセーブが壊れた時の復旧用（v21）
+let saveRecovered = false;
 let S = null;
 function defaultState() {
   return {
@@ -100,10 +102,19 @@ function defaultState() {
 }
 function load() {
   S = defaultState();
+  // メインセーブが壊れて読めない場合は、前回保存時のバックアップから復旧する。
+  // 旧仕様はパース失敗で黙って新規開始になり、育てた街が丸ごと消えていた（v21）
+  let loaded = false;
   try {
     const raw = localStorage.getItem(SAVE_KEY);
-    if (raw) { const d = JSON.parse(raw); if (d && typeof d === 'object') S = Object.assign(defaultState(), d); }
+    if (raw) { const d = JSON.parse(raw); if (d && typeof d === 'object') { S = Object.assign(defaultState(), d); loaded = true; } }
   } catch (e) {}
+  if (!loaded) {
+    try {
+      const bak = localStorage.getItem(SAVE_BACKUP_KEY);
+      if (bak) { const d = JSON.parse(bak); if (d && typeof d === 'object') { S = Object.assign(defaultState(), d); saveRecovered = true; } }
+    } catch (e) {}
+  }
   SHOPS.forEach(s => {
     if (typeof S.lv[s.id] !== 'number' || !isFinite(S.lv[s.id]) || S.lv[s.id] < 0) S.lv[s.id] = 0;
     if (typeof S.stock[s.id] !== 'number' || !isFinite(S.stock[s.id]) || S.stock[s.id] < 0) S.stock[s.id] = 0;
@@ -133,7 +144,12 @@ function load() {
 }
 function save() {
   S.lastSaved = Date.now();
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) {}
+  try {
+    // 上書き前のセーブをバックアップへ退避する（次にメインが壊れても1世代前へ戻れる・v21）
+    const prev = localStorage.getItem(SAVE_KEY);
+    if (prev) localStorage.setItem(SAVE_BACKUP_KEY, prev);
+    localStorage.setItem(SAVE_KEY, JSON.stringify(S));
+  } catch (e) {}
 }
 
 // ---------- 計算 ----------
@@ -650,7 +666,9 @@ function buildZukanList(list) {
   [0, 1, 2].forEach(d => {
     const head = document.createElement('div');
     head.className = 'zukan-head';
-    head.textContent = d === 0 ? '🏘️ 商店街エリア' : d === 1 ? '🌃 にぎわいタウン' : '🚀 ゆめタウン';
+    // エリア見出しに建設済み軒数を出す（コレクションの進み具合が図鑑を開いた瞬間に分かる・v21）
+    const builtInD = SHOPS.filter(s => s.d === d && S.lv[s.id] > 0).length;
+    head.textContent = (d === 0 ? '🏘️ 商店街エリア' : d === 1 ? '🌃 にぎわいタウン' : '🚀 ゆめタウン') + '（' + builtInD + '/12）';
     list.appendChild(head);
     const districtLockedNow = (d === 1 && !d2Unlocked()) || (d === 2 && !d3Unlocked());
     SHOPS.filter(s => s.d === d).forEach(shop => {
@@ -663,6 +681,16 @@ function buildZukanList(list) {
         '<div class="ach-sub">' + (lv > 0 ? '「' + shop.flavor + '」' : 'まだ建てられていないお店') + '</div></div>' +
         // 未建設でも「建てるとどれだけ稼げるか」が図鑑で分かるように生産プレビューを出す（v20）
         '<div class="ach-state">' + (lv > 0 ? '開店中<br>+' + fmt(rateOf(shop)) + '/秒' : (districtLockedNow ? '🔒エリア未解放' : (buildCost(shop) === 0 ? '初回無料' : fmt(buildCost(shop))) + '<br>建てると +' + fmt(shop.batch * globalMult() / shop.cycle) + '/秒')) + '</div>';
+      // 図鑑のカードをタップすると、その店のエリアへ移動して選択する（図鑑で見た店を
+      // そのままマップで回収・強化できるようにする・v21）
+      card.classList.add('zukan-card');
+      card.addEventListener('click', () => {
+        if (districtLockedNow) { play('error'); return; }
+        district = d; selectedId = shop.id;
+        document.querySelectorAll('.dtab').forEach((b, i) => b.classList.toggle('active', i === d));
+        play('open'); buildPlots(); refreshAll();
+        try { $('mapWrap').scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) {}
+      });
       list.appendChild(card);
     });
   });
@@ -677,6 +705,9 @@ function refreshDetail() {
   const lv = S.lv[shop.id];
   if (lv > 0) {
     $('detailName').textContent = shop.name + ' Lv.' + lv + (lv >= 10 ? ' 👑人気店' : '');
+    // ストック進捗バー：数字だけでは満タンまでの近さが直感で分からなかったため（v21）
+    const sfEl = $('detailStockFill');
+    if (sfEl) { const capF = stockCap(shop); sfEl.style.width = Math.min(100, S.stock[shop.id] / Math.max(1, capF) * 100) + '%'; sfEl.classList.toggle('full', S.stock[shop.id] >= capF * 0.999); }
     const nextMile = [10, 25, 50, 100].find(m => lv < m);
     const mileLine = nextMile ? '<div class="sub-line">🎯 あと ' + (nextMile - lv) + ' Lvで ' + (nextMile === 10 ? '👑人気店に！' : nextMile === 25 ? '💎伝説の名店に！' : nextMile === 50 ? '🌟超人気店に！' : '🏆神がかりの名店に！') + '</div>' : '<div class="sub-line">🏆 Lv.100超えの神店！</div>';
     // 満タンまでの残り時間（実効の貯まり速度＝生産×倍率×手動回収ぶん で予測）
@@ -710,6 +741,8 @@ function refreshDetail() {
     }
   } else {
     $('detailName').textContent = shop.name + '（空き地）';
+    const sfEl2 = $('detailStockFill');
+    if (sfEl2) { sfEl2.style.width = '0%'; sfEl2.classList.remove('full'); }
     // あとどれくらいで建てられるか（金額だけでは遠さが分からなかったため・v20）
     const bcost = buildCost(shop);
     const progLine = bcost === 0 ? '' : (S.coins >= bcost ? '　|　<b>今建てられる！</b>' : '　|　あと ' + fmt(bcost - S.coins) + ' コイン（' + Math.floor(S.coins / bcost * 100) + '%）');
@@ -754,9 +787,9 @@ function refreshAll() {
       : 'フィーバー+10<br>ゲージあと' + Math.ceil(100 - S.fever);
   }
   const buffs = [];
-  if (isRushing()) buffs.push('行列×3');
+  if (isRushing()) buffs.push('行列×3 あと' + Math.max(0, Math.ceil((S.rushUntil - Date.now()) / 1000)) + '秒'); // 残り秒数も出す（いつ終わるか分からないと回収の判断ができないため・v21）
   else if (S.nextRushAt) buffs.push('行列 あと' + Math.max(0, Math.ceil((S.nextRushAt - Date.now()) / 1000)) + '秒'); // 次の行列イベント予告
-  if (buffActive()) buffs.push((S.buffKind === 'buzz' ? 'バズ×' : 'ガチャ×') + S.buffMult);
+  if (buffActive()) buffs.push((S.buffKind === 'buzz' ? 'バズ×' : 'ガチャ×') + S.buffMult + ' あと' + Math.max(0, Math.ceil((S.buffUntil - Date.now()) / 1000)) + '秒');
   $('buffLabel').textContent = buffs.join(' ');
   document.body.classList.toggle('fever', isFever());
   // 目標バナー（序盤はチュートリアル風ヒントを優先）
@@ -1126,7 +1159,7 @@ function spinGacha() {
   S.gachaReadyAt = Date.now() + 60000;
   S.stats.gachas++;
   play('gacha');
-  showModal('1f3b0', 'ラッキーガチャ', '何が出るかな…！', '…');
+  showModal('1f3b0', 'ラッキーガチャ', '何が出るかな…！\n（大当たり10%・コイン35%・生産2倍25%・フィーバー15%・行列15%）', '…');
   $('modalBtn').disabled = true;
   const icons = SHOPS.map(s => s.icon).concat(['1f4b0', '1f525', '1f340', '1f31f']);
   let spins = 0;
@@ -1265,6 +1298,9 @@ function tick() {
     toast('🎉 お客さん行列！20秒間 生産×3！今のうちに回収しよう');
   }
   // 宝箱
+  // モーダル表示中は宝箱の残り時間を止める：モーダルに気を取られている間に
+  // 宝箱が消えるのは理不尽なため（v21）
+  if (chestState.active && !$('modal').classList.contains('hidden')) chestState.until += Math.round(rawDt * 1000);
   if (!chestState.active && now >= chestState.nextAt) spawnChest();
   if (chestState.active && chestState.el) chestState.el.classList.toggle('urgent', chestState.until - now < 4000);
   if (chestState.active && now > chestState.until) { removeChest(); toast('🎁 宝箱は消えてしまった…またの出現を待とう'); }
@@ -1317,6 +1353,7 @@ checkDaily();
 buildPlots();
 buildList();
 refreshAll();
+if (saveRecovered) toast('💾 セーブが壊れていたので、バックアップから復旧したよ');
 if (window.gsap) gsap.to('#tapImg', { y: -6, duration: 0.9, yoyo: true, repeat: -1, ease: 'sine.inOut' });
 // 長押し連打：呼び込みボタンを押し続けると自動で連打する（自作）
 let holdIv = null, holdStart = 0, suppressHoldClick = false;

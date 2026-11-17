@@ -274,6 +274,15 @@ body { background:linear-gradient(180deg,#274b73 0%,#5ea9dd 26%,#aee3ff 52%,#ffe
 #list .card.afford { box-shadow:0 0 0 2.5px #ffd93b, 0 4px 14px rgba(190,140,0,.35); }
 #list .card.afford .buy-btn { animation:collectGlow .55s infinite alternate; }
 
+/* ===== v21 改善（自作CSS）：詳細のストック進捗バー、フィーバー中の呼び込みボタン発光、図鑑カードのタップ可能表示 ===== */
+.detail-stock-track { height:8px; margin-top:5px; background:linear-gradient(180deg,#c9d3dd,#dde5ec); border-radius:99px; box-shadow:inset 0 1px 3px rgba(20,35,55,.35); overflow:hidden; }
+#detailStockFill { height:100%; width:0%; background:linear-gradient(180deg,#7be495,#2f9e5f); border-radius:99px; transition:width .3s; }
+#detailStockFill.full { background:linear-gradient(180deg,#ffd93b,#f0a500); }
+body.fever #tapBtn { animation:tapFeverGlow .5s infinite alternate; }
+@keyframes tapFeverGlow { from{ box-shadow:0 9px 0 #d17c06, 0 16px 26px rgba(0,0,0,.3), 0 0 16px rgba(255,120,0,.65); } to{ box-shadow:0 9px 0 #d17c06, 0 16px 26px rgba(0,0,0,.3), 0 0 34px rgba(255,60,0,.95); } }
+.zukan-card { cursor:pointer; }
+.zukan-card:active { transform:scale(.98); }
+
 /* ===== v16 改善（自作CSS） ===== */
 #collectAllBtn.ready-glow, #collectBtn.ready-glow { animation:collectGlow .55s infinite alternate; }
 @keyframes collectGlow { from{ box-shadow:inset 0 1px 0 rgba(255,255,255,.5), inset 0 -3px 0 rgba(0,0,0,.18), 0 4px 10px rgba(10,25,45,.35); } to{ box-shadow:inset 0 1px 0 rgba(255,255,255,.5), inset 0 -3px 0 rgba(0,0,0,.18), 0 0 24px 7px rgba(255,200,40,.9); } }
