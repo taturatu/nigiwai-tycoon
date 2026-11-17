@@ -296,6 +296,12 @@ body.fever-almost #feverLabel { color:#ff8a00; }
 .chest-timer { position:absolute; transform:translate(-4px,-20px); background:rgba(20,20,30,.88); color:#ffd93b;
   font-size:11px; font-weight:900; border-radius:99px; padding:2px 8px; pointer-events:none; z-index:8; white-space:nowrap; }
 
+/* ===== v23 改善（自作CSS）：クエストあと少しの発光、ガチャCD中の見た目、宝箱タイマー残りわずかの警告色 ===== */
+#questBox.quest-almost { box-shadow:0 0 0 2.5px #ffd93b, 0 8px 20px rgba(190,140,0,.35); }
+#questBox.quest-almost .quest-head { color:#b06f00; }
+#gachaBtn.on-cd { filter:grayscale(.55); opacity:.82; }
+.chest-timer.urgent { background:#c0392b; color:#fff; animation:chestUrgent .18s infinite alternate; }
+
 /* ===== v16 改善（自作CSS） ===== */
 #collectAllBtn.ready-glow, #collectBtn.ready-glow { animation:collectGlow .55s infinite alternate; }
 @keyframes collectGlow { from{ box-shadow:inset 0 1px 0 rgba(255,255,255,.5), inset 0 -3px 0 rgba(0,0,0,.18), 0 4px 10px rgba(10,25,45,.35); } to{ box-shadow:inset 0 1px 0 rgba(255,255,255,.5), inset 0 -3px 0 rgba(0,0,0,.18), 0 0 24px 7px rgba(255,200,40,.9); } }

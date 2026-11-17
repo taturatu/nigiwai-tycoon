@@ -145,6 +145,8 @@ function load() {
   if (typeof S.nextRushAt !== 'number' || !isFinite(S.nextRushAt) || S.nextRushAt <= 0) S.nextRushAt = Date.now() + 80000;
   if (typeof S.daily.streak !== 'number' || !isFinite(S.daily.streak) || S.daily.streak < 0) S.daily.streak = 0;
   if (typeof S.daily.last !== 'string') S.daily.last = '';
+  // サウンド設定が壊れた型（文字列等）だと play() が常時無効化されるため boolean に補正する（v23）
+  if (typeof S.sound !== 'boolean') S.sound = true;
 }
 function save() {
   S.lastSaved = Date.now();
@@ -635,7 +637,9 @@ function buildList() {
       '条件：この街での総収入 ' + fmt(need) + ' コイン（現在 ' + fmt(S.runEarned) + '）</p>' +
       // 進捗バーと残り（数値だけでは遠さが伝わらなかったため・v20）
       '<div class="bar-track"><img class="bar-fill-img" src="img/ui/bar_color.png" alt="" style="width:' + pct + '%"></div>' +
-      '<p>進捗 ' + pct + '%' + (can ? '・条件達成！' : '（あと ' + fmt(Math.max(0, need - S.runEarned)) + ' コイン）') + '　次のスターで生産は合計 +' + ((S.stars + 1) * 50) + '% に</p>';
+      '<p>進捗 ' + pct + '%' + (can ? '・条件達成！' : '（あと ' + fmt(Math.max(0, need - S.runEarned)) + ' コイン）') + '　次のスターで生産は合計 +' + ((S.stars + 1) * 50) + '% に</p>' +
+      // 到達までの目安時間（今の生産ペースで計算。遠さだけでなく「いつ頃か」が分かるように・v23）
+      (!can && totalRate() / Math.max(1, multProd()) > 0 ? '<p>今の生産ペースだと目安 ' + fmtEta((need - S.runEarned) / (totalRate() / Math.max(1, multProd()))) + 'で到達</p>' : '');
     const btn = document.createElement('button');
     btn.className = 'kenney-btn red big'; btn.textContent = can ? '✨ リニューアルする！' : 'まだ条件を満たしていない';
     btn.disabled = !can;
@@ -685,7 +689,7 @@ function buildZukanList(list) {
         '<div class="ach-main"><div class="ach-name">' + (lv > 0 ? shop.name : '？？？') + (lv > 0 ? ' Lv.' + lv : '') + '</div>' +
         '<div class="ach-sub">' + (lv > 0 ? '「' + shop.flavor + '」' : 'まだ建てられていないお店') + '</div></div>' +
         // 未建設でも「建てるとどれだけ稼げるか」が図鑑で分かるように生産プレビューを出す（v20）
-        '<div class="ach-state">' + (lv > 0 ? '開店中<br>+' + fmt(rateOf(shop)) + '/秒' : (districtLockedNow ? '🔒エリア未解放' : (buildCost(shop) === 0 ? '初回無料' : fmt(buildCost(shop))) + '<br>建てると +' + fmt(shop.batch * globalMult() / shop.cycle) + '/秒')) + '</div>';
+        '<div class="ach-state">' + (lv > 0 ? '開店中<br>+' + fmt(rateOf(shop)) + '/秒' : (districtLockedNow ? '🔒エリア未解放' : (buildCost(shop) === 0 ? '初回無料' : (S.coins >= buildCost(shop) ? '今建てられる！' : fmt(buildCost(shop)) + '<br>あと' + fmt(buildCost(shop) - S.coins))) + '<br>建てると +' + fmt(shop.batch * globalMult() / shop.cycle) + '/秒')) + '</div>';
       // 図鑑のカードをタップすると、その店のエリアへ移動して選択する（図鑑で見た店を
       // そのままマップで回収・強化できるようにする・v21）
       card.classList.add('zukan-card');
@@ -722,7 +726,7 @@ function refreshDetail() {
     const fillRate = rateOf(shop) * multProd() * (1 - autoRate());
     const fullLine = S.stock[shop.id] >= capNow * 0.999
       ? '<div class="sub-line">💰 ストック満タン！ 回収で+20%ボーナス</div>'
-      : (fillRate > 0 ? '<div class="sub-line">⏳ 満タンまで ' + fmtEta((capNow - S.stock[shop.id]) / fillRate) + '（満タン回収で+20%）</div>' : '');
+      : (fillRate > 0 ? '<div class="sub-line">⏳ 満タンまで ' + fmtEta((capNow - S.stock[shop.id]) / fillRate) + '（満タン回収で+20%）</div>' + (S.stock[shop.id] >= capNow * 0.5 ? '<div class="sub-line">💡 満タン回収ならボーナス約 +' + fmt(Math.ceil(capNow * 0.20)) + '（今回収すると +' + fmt(Math.floor(S.stock[shop.id])) + '）</div>' : '') : '');
     // 強化の元が取れる目安：増える生産/秒で強化コストを割る（買う判断の材料が無かったため・v20）
     const upGainRate = rateOf(shop) * 0.6;
     // 増分が1未満の店（序盤のコーヒーは+0.6/秒）では fmt の切り捨てで「+0/秒」になってしまうため小数1桁で出す
@@ -772,7 +776,7 @@ function refreshDetail() {
 function refreshAll() {
   $('coins').textContent = fmt(S.coins);
   // 連続ログイン日数はデイリーモーダルでしか見えなかったため HUD にも常駐表示する（2日目以降・v20）
-  $('perSec').textContent = '生産 +' + fmt(totalRate()) + ' / 秒　自動回収 ' + Math.round(autoRate() * 100) + '%' + (S.daily.streak > 1 ? '　🔥' + S.daily.streak + '日連続' : '');
+  $('perSec').textContent = '生産 +' + fmt(totalRate()) + ' / 秒　自動回収 ' + Math.round(autoRate() * 100) + '%' + (S.daily.streak > 1 ? '　🔥' + S.daily.streak + '日連続' : '') + (countBuilt() === 0 ? '　まずは開店しよう！' : '');
   // コンボの残り時間（1.2秒で途切れる）も見せる。途切れる瞬間が分からず連打が止めどき不明だった（v20）
   if (combo >= 2) {
     const ct = $('comboTime');
@@ -797,7 +801,7 @@ function refreshAll() {
     $('feverFill').style.width = Math.max(0, (S.feverUntil - Date.now()) / 150) + '%';
     $('feverBtnText').innerHTML = 'FEVER中！<br>🔥開催中';
   } else {
-    $('feverLabel').textContent = 'FEVERゲージ';
+    $('feverLabel').textContent = 'FEVERゲージ ' + Math.floor(S.fever) + '%';
     $('feverFill').style.width = S.fever + '%';
     $('feverBtnText').innerHTML = Date.now() < feverBoostReadyAt
       ? 'おやすみ中<br>あと' + Math.ceil((feverBoostReadyAt - Date.now()) / 1000) + '秒'
@@ -821,7 +825,7 @@ function refreshAll() {
   let pvFullBonus = 0;
   SHOPS.forEach(s => { const a = Math.floor(S.stock[s.id] || 0); if (a > 0 && S.lv[s.id] > 0 && a >= stockCap(s) * 0.999) pvFullBonus += Math.ceil(a * 0.20); });
   const pvBonus = (hitShops >= 2 ? Math.ceil(ts * 0.10) : 0) + pvFullBonus;
-  ca.innerHTML = '💰 まとめて回収（' + hitShops + '軒） +' + fmt(ts) + (pvBonus > 0 ? ' ボーナス+' + fmt(pvBonus) + '！' : '') + (fullShops ? ' 🔔満タン' + fullShops + '軒！' : '');
+  ca.innerHTML = '💰 まとめて回収（' + hitShops + '軒） +' + fmt(ts) + (pvBonus > 0 ? ' ボーナス+' + fmt(pvBonus) + '！' : '') + (fullShops ? ' 🔔満タン' + fullShops + '軒！' : '') + (hitShops === 1 && pvBonus === 0 ? '（2軒ためると+10%ボーナス）' : '');
   ca.disabled = ts < 1;
   // 光るしきい値は進行度連動：固定500だと序盤（ストック上限36等）では永遠に光らなかった（v17）
   const capTotal = SHOPS.reduce((t, s) => t + (S.lv[s.id] > 0 ? stockCap(s) : 0), 0);
@@ -831,7 +835,9 @@ function refreshAll() {
     if (el) el.textContent = ' ' + SHOPS.filter(s => s.d === d && S.lv[s.id] > 0).length + '/12';
   });
   const achLeft = ACHIEVEMENTS.filter(a => !S.ach[a.id]).length;
-  $('achBadge').textContent = achLeft ? '(' + (ACHIEVEMENTS.length - achLeft) + '/' + ACHIEVEMENTS.length + ')' : '👑';
+  // あと少し（80%以上）の実績がある時はバッジに🔥を付けて、狙いどころを知らせる（v23）
+  const achAlmost = ACHIEVEMENTS.some(a => !S.ach[a.id] && a.target > 0 && a.now() / a.target >= 0.8);
+  $('achBadge').textContent = achLeft ? '(' + (ACHIEVEMENTS.length - achLeft) + '/' + ACHIEVEMENTS.length + ')' + (achAlmost ? '🔥' : '') : '👑';
   let goal = cheapestUnbuilt(0) || cheapestUnbuilt(1) || cheapestUnbuilt(2);
   if (S.stats.builds === 0) {
     $('goalText').textContent = '👆 光る看板タップで開店！（初回は無料）';
@@ -911,6 +917,8 @@ function refreshAll() {
   $('questText').textContent = q.label + '（' + fmt(prog) + ' / ' + fmt(q.target) + (q.target ? '・' + Math.floor(prog / q.target * 100) + '%' : '') + (prog < q.target ? '・あと' + fmt(q.target - prog) : '') + '）';
   $('questReward').textContent = 'ごほうび +' + fmt(questRewardCoins());
   $('questFill').style.width = (q.target ? prog / q.target * 100 : 100) + '%';
+  // クエストがあと少し（80%以上）の時はボックスを金色に光らせて後押しする（v23）
+  $('questBox').classList.toggle('quest-almost', q.target > 0 && prog < q.target && prog / q.target >= 0.8);
   // 全体強化ボタン
   if (bottomTab === 'upgrades') {
     UPGRADES.forEach(up => {
@@ -927,7 +935,10 @@ function refreshAll() {
   // ガチャ
   const cd = Math.max(0, Math.ceil((S.gachaReadyAt - Date.now()) / 1000));
   $('gachaCd').textContent = cd > 0 ? 'あと ' + cd + ' 秒' : 'まわせる！';
-  $('gachaBtn').disabled = cd > 0;
+  // クールダウン中もボタンを押せるままにして、押したら残り秒数をフロートで返す。
+  // disabled だと「無反応」に見えて壊れたと誤解されるため（v23）
+  $('gachaBtn').disabled = false;
+  $('gachaBtn').classList.toggle('on-cd', cd > 0);
   // 回せる時はボタンを光らせて気づけるようにする（v22）
   $('gachaBtn').classList.toggle('ready-glow', cd === 0);
   // ガチャが回せるようになった瞬間だけ知らせる（起動直後の初期表示では鳴らさない・v19）
@@ -1181,7 +1192,13 @@ function openChest() {
 // ---------- ガチャ ----------
 let gachaSpinning = false;
 function spinGacha() {
-  if (gachaSpinning || Date.now() < S.gachaReadyAt) { play('error'); return; }
+  if (gachaSpinning) { play('error'); return; }
+  if (Date.now() < S.gachaReadyAt) {
+    play('error');
+    const r = $('gachaBtn').getBoundingClientRect();
+    floatNumAt(r.left + r.width / 2 - 34, r.top - 8, 'ガチャ あと' + Math.ceil((S.gachaReadyAt - Date.now()) / 1000) + '秒', false);
+    return;
+  }
   // 他のモーダルが開いていたら閉じてから回す（表示の取り違え防止）
   document.getElementById('modal').classList.add('hidden');
   modalQueue.length = 0;
@@ -1333,7 +1350,7 @@ function tick() {
   if (chestState.active && !$('modal').classList.contains('hidden')) chestState.until += Math.round(rawDt * 1000);
   if (!chestState.active && now >= chestState.nextAt) spawnChest();
   if (chestState.active && chestState.el) chestState.el.classList.toggle('urgent', chestState.until - now < 4000);
-  if (chestState.active && chestState.timerEl) chestState.timerEl.textContent = Math.max(0, Math.ceil((chestState.until - now) / 1000)) + '秒';
+  if (chestState.active && chestState.timerEl) { chestState.timerEl.textContent = Math.max(0, Math.ceil((chestState.until - now) / 1000)) + '秒'; chestState.timerEl.classList.toggle('urgent', chestState.until - now < 3000); }
   if (chestState.active && now > chestState.until) { removeChest(); toast('🎁 宝箱は消えてしまった…またの出現を待とう'); }
   checkAch();
   refreshAll();
