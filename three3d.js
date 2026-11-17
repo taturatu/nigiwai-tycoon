@@ -381,11 +381,14 @@ window.T3D = (function () {
     const inten = gold ? 0.35 + nightK * 0.3 : nightK * 0.55;
     rec.mats.forEach(m => { if (m.emissive) { m.emissive.setHex(hex); m.emissiveIntensity = inten; } });
   }
+  // Lvで拡大した後の実効の高さ（看板・コイン・バッジのY位置はこちらに合わせる・v20）
+  function effH(r) { return (r.bHeight || 0) * (r.lvScale || 1); }
   function setLevel(shopId, lv) {
     // お店のレベルで建物の外観が育つ：少しずつ大きくなり、Lv10以上は金色に輝く
     const rec = plotGroups[shopId];
     if (!rec || !rec.building || !rec.baseScale) return;
     lv = Math.max(0, lv | 0);
+    rec.lvScale = 1 + Math.min(lv, 25) * 0.018;
     // Lvバッジはレベルが変わった時だけ作り直す（コイン表示の反対側に浮かせる）
     if (rec.lvBadgeShown !== lv) {
       rec.lvBadgeShown = lv;
@@ -431,6 +434,7 @@ window.T3D = (function () {
   function setAfford(shopId, afford) {
     const rec = plotGroups[shopId];
     if (!rec || rec.builtFlag) return;
+    rec.afford = !!afford; // 買える空き地は animate 側でパッドを脈動させる（2Dの padPulse と揃える・v20）
     rec.pad.material.emissiveIntensity = afford ? 0.55 : 0.18;
   }
 
@@ -444,7 +448,7 @@ window.T3D = (function () {
     if (!rec || !renderer) return null;
     const v = new THREE.Vector3();
     rec.group.getWorldPosition(v);
-    v.y = (rec.bHeight || 0) * (heightRatio || 0.6) + 0.6;
+    v.y = effH(rec) * (heightRatio || 0.6) + 0.6;
     v.project(camera);
     const rect = renderer.domElement.getBoundingClientRect();
     return {
@@ -486,7 +490,7 @@ window.T3D = (function () {
       Object.values(plotGroups).forEach(r => {
         const v = new THREE.Vector3();
         r.group.getWorldPosition(v);
-        v.y = Math.max(0.9, (r.bHeight || 0) * 0.55);
+        v.y = Math.max(0.9, effH(r) * 0.55);
         v.project(camera);
         const sx = (v.x * 0.5 + 0.5) * rect.width;
         const sy = (-v.y * 0.5 + 0.5) * rect.height;
@@ -570,13 +574,16 @@ window.T3D = (function () {
     });
     // プロットの動き
     Object.values(plotGroups).forEach((r, i) => {
-      if (r.totem && r.building) { r.totem.rotation.y += dt * 1.1; r.totem.position.y = r.bHeight + 0.85 + Math.sin(t * 2 + r.phase) * 0.08; }
-      if (r.coin && r.coin.visible) { r.coin.position.y = r.bHeight * 0.55 + 0.5 + Math.sin(t * 3 + r.phase) * 0.09; if (r.stockFull && r.coinBaseScale) { const ps = r.coinBaseScale * (1 + 0.18 * Math.sin(t * 6 + r.phase)); r.coin.scale.set(ps, ps, 1); } }
-      if (r.lvBadge) r.lvBadge.position.y = r.bHeight + 0.32 + Math.sin(t * 3 + r.phase + 1.5) * 0.09;
+      // 看板・コイン・バッジは拡大後の建物の高さ（effH）に追随させる。従来は未拡大の
+      // bHeight 基準で、Lvが上がるほど屋根に埋まっていった（v20）
+      if (r.totem && r.building) { r.totem.rotation.y += dt * 1.1; r.totem.position.y = effH(r) + 0.85 + Math.sin(t * 2 + r.phase) * 0.08; }
+      if (r.coin && r.coin.visible) { r.coin.position.y = effH(r) * 0.55 + 0.5 + Math.sin(t * 3 + r.phase) * 0.09; if (r.stockFull && r.coinBaseScale) { const ps = r.coinBaseScale * (1 + 0.18 * Math.sin(t * 6 + r.phase)); r.coin.scale.set(ps, ps, 1); } }
+      if (r.lvBadge) r.lvBadge.position.y = effH(r) + 0.32 + Math.sin(t * 3 + r.phase + 1.5) * 0.09;
       if (!r.builtFlag && r.icon) r.icon.position.y = 1.35 + Math.sin(t * 2.2 + r.phase) * 0.1;
       if (!r.builtFlag && r.label) r.label.position.y = 2.45 + Math.sin(t * 2.2 + r.phase) * 0.1;
       if (r.stockFull && r.pad) r.pad.material.emissive.setHex(0xff8800), r.pad.material.emissiveIntensity = 0.35 + 0.2 * Math.sin(t * 6);
       else if (r.builtFlag && r.pad) r.pad.material.emissiveIntensity = 0;
+      else if (!r.builtFlag && r.pad) r.pad.material.emissiveIntensity = r.afford ? 0.45 + 0.25 * Math.sin(t * 5 + r.phase) : 0.18;
     });
     renderer.render(scene, camera);
   }

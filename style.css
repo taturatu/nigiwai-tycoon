@@ -270,6 +270,10 @@ body { background:linear-gradient(180deg,#274b73 0%,#5ea9dd 26%,#aee3ff 52%,#ffe
    フォントと余白を詰めて「にぎわいタウン 0/12」「リニューアル」の右端切れを解消、
    buffLabel も少し詰めた（各ルールは既存定義側を直接変更済み） ===== */
 
+/* ===== v20 改善（自作CSS）：買える全体強化のカードを金枠で強調 ===== */
+#list .card.afford { box-shadow:0 0 0 2.5px #ffd93b, 0 4px 14px rgba(190,140,0,.35); }
+#list .card.afford .buy-btn { animation:collectGlow .55s infinite alternate; }
+
 /* ===== v16 改善（自作CSS） ===== */
 #collectAllBtn.ready-glow, #collectBtn.ready-glow { animation:collectGlow .55s infinite alternate; }
 @keyframes collectGlow { from{ box-shadow:inset 0 1px 0 rgba(255,255,255,.5), inset 0 -3px 0 rgba(0,0,0,.18), 0 4px 10px rgba(10,25,45,.35); } to{ box-shadow:inset 0 1px 0 rgba(255,255,255,.5), inset 0 -3px 0 rgba(0,0,0,.18), 0 0 24px 7px rgba(255,200,40,.9); } }

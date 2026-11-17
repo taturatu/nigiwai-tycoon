@@ -121,6 +121,15 @@ function load() {
   ['coins','runEarned','lifetimeEarned','stars','fever'].forEach(k => {
     if (typeof S[k] !== 'number' || !isFinite(S[k]) || S[k] < 0) S[k] = 0;
   });
+  // クエスト・タイマー系も同様に補正（questIdx が NaN だと questNow() が undefined を返し表示が壊れるため・v20）
+  ['questIdx','questBase','gachaReadyAt','feverUntil','rushUntil','buffUntil','lastSaved'].forEach(k => {
+    if (typeof S[k] !== 'number' || !isFinite(S[k]) || S[k] < 0) S[k] = 0;
+  });
+  S.questIdx = Math.floor(S.questIdx);
+  if (typeof S.buffMult !== 'number' || !isFinite(S.buffMult) || S.buffMult < 1) S.buffMult = 1;
+  if (typeof S.nextRushAt !== 'number' || !isFinite(S.nextRushAt) || S.nextRushAt <= 0) S.nextRushAt = Date.now() + 80000;
+  if (typeof S.daily.streak !== 'number' || !isFinite(S.daily.streak) || S.daily.streak < 0) S.daily.streak = 0;
+  if (typeof S.daily.last !== 'string') S.daily.last = '';
 }
 function save() {
   S.lastSaved = Date.now();
@@ -589,7 +598,7 @@ function buildList() {
       btn.className = 'kenney-btn yellow buy-btn'; btn.textContent = '強化';
       btn.addEventListener('click', () => buyUpgrade(up));
       card.appendChild(btn); list.appendChild(card);
-      upRefs[up.id] = { btn, lv: card.querySelector('.up-lv'), eff: card.querySelector('.card-effect') };
+      upRefs[up.id] = { btn, lv: card.querySelector('.up-lv'), eff: card.querySelector('.card-effect'), card };
     });
   } else if (bottomTab === 'ach') {
     buildAchList(list);
@@ -599,10 +608,14 @@ function buildList() {
     const box = document.createElement('div'); box.className = 'prestige-big';
     const need = prestigeNeed();
     const can = S.runEarned >= need;
+    const pct = Math.min(100, Math.floor(S.runEarned / need * 100));
     box.innerHTML =
       '<div class="star-now">現在の転生スター <img src="img/twemoji/2b50.svg" class="mini-icon"> × ' + S.stars + '（生産 +' + (S.stars * 50) + '%）</div>' +
       '<p>街をリニューアルすると、お店もコインもリセットされる代わりに<br><b>転生スター</b>が1つ増えて、生産が永久に +50% されるよ。<br>' +
-      '条件：この街での総収入 ' + fmt(need) + ' コイン（現在 ' + fmt(S.runEarned) + '）</p>';
+      '条件：この街での総収入 ' + fmt(need) + ' コイン（現在 ' + fmt(S.runEarned) + '）</p>' +
+      // 進捗バーと残り（数値だけでは遠さが伝わらなかったため・v20）
+      '<div class="bar-track"><img class="bar-fill-img" src="img/ui/bar_color.png" alt="" style="width:' + pct + '%"></div>' +
+      '<p>進捗 ' + pct + '%' + (can ? '・条件達成！' : '（あと ' + fmt(Math.max(0, need - S.runEarned)) + ' コイン）') + '　次のスターで生産は合計 +' + ((S.stars + 1) * 50) + '% に</p>';
     const btn = document.createElement('button');
     btn.className = 'kenney-btn red big'; btn.textContent = can ? '✨ リニューアルする！' : 'まだ条件を満たしていない';
     btn.disabled = !can;
@@ -625,7 +638,8 @@ function buildAchList(list) {
       '<div class="ach-main"><div class="ach-name">' + a.name + '</div>' +
       '<div class="ach-sub">' + a.desc + '</div>' +
       (done ? '' : '<div class="ach-bar"><div class="ach-bar-fill" style="width:' + pct + '%"></div></div>') + '</div>' +
-      '<div class="ach-state">' + (done ? '達成！🏅' : fmt(now) + ' / ' + fmt(a.target) + '<br>' + pct + '%') + '</div>';
+      // 未達成の実績にもごほうび目安を出す（達成時の実額と同式：最大(300, クエスト報酬×3)・v20）
+      '<div class="ach-state">' + (done ? '達成！🏅' : fmt(now) + ' / ' + fmt(a.target) + '<br>' + pct + '%<br>ごほうび約+' + fmt(Math.max(300, questRewardCoins() * 3))) + '</div>';
     list.appendChild(card);
   });
 }
@@ -647,7 +661,8 @@ function buildZukanList(list) {
         '<img class="zukan-icon' + (lv > 0 ? '' : ' locked') + '" src="img/twemoji/' + shop.icon + '.svg" alt="">' +
         '<div class="ach-main"><div class="ach-name">' + (lv > 0 ? shop.name : '？？？') + (lv > 0 ? ' Lv.' + lv : '') + '</div>' +
         '<div class="ach-sub">' + (lv > 0 ? '「' + shop.flavor + '」' : 'まだ建てられていないお店') + '</div></div>' +
-        '<div class="ach-state">' + (lv > 0 ? '開店中<br>+' + fmt(rateOf(shop)) + '/秒' : (districtLockedNow ? '🔒エリア未解放' : (buildCost(shop) === 0 ? '初回無料' : fmt(buildCost(shop))))) + '</div>';
+        // 未建設でも「建てるとどれだけ稼げるか」が図鑑で分かるように生産プレビューを出す（v20）
+        '<div class="ach-state">' + (lv > 0 ? '開店中<br>+' + fmt(rateOf(shop)) + '/秒' : (districtLockedNow ? '🔒エリア未解放' : (buildCost(shop) === 0 ? '初回無料' : fmt(buildCost(shop))) + '<br>建てると +' + fmt(shop.batch * globalMult() / shop.cycle) + '/秒')) + '</div>';
       list.appendChild(card);
     });
   });
@@ -670,9 +685,14 @@ function refreshDetail() {
     const fullLine = S.stock[shop.id] >= capNow * 0.999
       ? '<div class="sub-line">💰 ストック満タン！ 回収で+20%ボーナス</div>'
       : (fillRate > 0 ? '<div class="sub-line">⏳ 満タンまで ' + fmtEta((capNow - S.stock[shop.id]) / fillRate) + '（満タン回収で+20%）</div>' : '');
+    // 強化の元が取れる目安：増える生産/秒で強化コストを割る（買う判断の材料が無かったため・v20）
+    const upGainRate = rateOf(shop) * 0.6;
+    // 増分が1未満の店（序盤のコーヒーは+0.6/秒）では fmt の切り捨てで「+0/秒」になってしまうため小数1桁で出す
+    const gainTxt = upGainRate < 10 ? String(Math.round(upGainRate * 10) / 10) : fmt(upGainRate);
+    const paybackLine = upGainRate > 0 ? '<div class="sub-line">⬆️ 強化で生産 +' + gainTxt + '/秒（コストは生産増で' + fmtEta(shopUpCost(shop) / upGainRate).replace('あと', '') + 'ぶんが目安）</div>' : '';
     $('detailSub').innerHTML = '<div class="sub-line">売上ストック <b>' + fmt(S.stock[shop.id]) + '</b> / ' + fmt(capNow) + '</div>' +
       '<div class="sub-line">1回 +' + fmt(batchOf(shop)) + '（' + shop.cycle + '秒ごと）・生産 +' + fmt(rateOf(shop)) + '/秒</div>' +
-      '<div class="sub-line">次のLvで 1回 +' + fmt(batchOf(shop) * 1.6) + '（+60%）</div>' + fullLine + mileLine;
+      '<div class="sub-line">次のLvで 1回 +' + fmt(batchOf(shop) * 1.6) + '（+60%）</div>' + paybackLine + fullLine + mileLine;
     const cAmt = Math.floor(S.stock[shop.id]);
     const cFull = S.stock[shop.id] >= capNow * 0.999 && cAmt >= 1;
     const cGrand = cAmt + (cFull ? Math.ceil(cAmt * 0.20) : 0);
@@ -690,7 +710,10 @@ function refreshDetail() {
     }
   } else {
     $('detailName').textContent = shop.name + '（空き地）';
-    $('detailSub').innerHTML = (buildCost(shop) === 0 ? '建設費 <b>無料（初回だけ！）</b>' : '建設費 ' + fmt(buildCost(shop))) + '　|　建てると ' + shop.cycle + '秒ごとに +' + fmt(shop.batch * globalMult()) + ' の売上がたまる（生産 +' + fmt(shop.batch * globalMult() / shop.cycle) + '/秒）';
+    // あとどれくらいで建てられるか（金額だけでは遠さが分からなかったため・v20）
+    const bcost = buildCost(shop);
+    const progLine = bcost === 0 ? '' : (S.coins >= bcost ? '　|　<b>今建てられる！</b>' : '　|　あと ' + fmt(bcost - S.coins) + ' コイン（' + Math.floor(S.coins / bcost * 100) + '%）');
+    $('detailSub').innerHTML = (bcost === 0 ? '建設費 <b>無料（初回だけ！）</b>' : '建設費 ' + fmt(bcost)) + progLine + '　|　建てると ' + shop.cycle + '秒ごとに +' + fmt(shop.batch * globalMult()) + ' の売上がたまる（生産 +' + fmt(shop.batch * globalMult() / shop.cycle) + '/秒）';
     $('collectBtn').textContent = 'まだ建っていない';
     $('collectBtn').disabled = true;
     $('collectBtn').classList.remove('ready-glow');
@@ -704,7 +727,15 @@ function refreshDetail() {
 
 function refreshAll() {
   $('coins').textContent = fmt(S.coins);
-  $('perSec').textContent = '生産 +' + fmt(totalRate()) + ' / 秒　自動回収 ' + Math.round(autoRate() * 100) + '%';
+  // 連続ログイン日数はデイリーモーダルでしか見えなかったため HUD にも常駐表示する（2日目以降・v20）
+  $('perSec').textContent = '生産 +' + fmt(totalRate()) + ' / 秒　自動回収 ' + Math.round(autoRate() * 100) + '%' + (S.daily.streak > 1 ? '　🔥' + S.daily.streak + '日連続' : '');
+  // コンボの残り時間（1.2秒で途切れる）も見せる。途切れる瞬間が分からず連打が止めどき不明だった（v20）
+  if (combo >= 2) {
+    const ct = $('comboTime');
+    if (ct) ct.textContent = ' あと' + Math.max(0, (1200 - (Date.now() - lastTapAt)) / 1000).toFixed(1) + '秒';
+    const cc = $('comboCount'); if (cc) cc.textContent = combo;
+    const cm2 = $('comboMultLabel'); if (cm2) cm2.textContent = ' ×' + comboMult().toFixed(2);
+  }
   // 称号は常駐表示（ランクアップの瞬間しか見えないのはもったいないため）
   const rn = $('rankName');
   if (rn) rn.textContent = RANKS[S.rank].name;
@@ -780,14 +811,19 @@ function refreshAll() {
   } else { $('goalText').textContent = '全店制覇！あとは強化と転生で限界突破だ'; $('goalFill').style.width = '100%'; }
   $('d2lock').textContent = d2Unlocked() ? '' : '🔒';
   $('d3lock').textContent = d3Unlocked() ? '' : '🔒';
-  // 建てられるようになったお店のお知らせ（買えない→買えるに変わった瞬間だけ、1軒につき変化のたび1回）
+  // 建てられるようになったお店のお知らせ（買えない→買えるに変わった瞬間だけ）
+  // 同時に複数店が買えるようになった場合、トーストは表示を上書きし合って最後の1件しか
+  // 見えなかった（パン屋とラーメン屋が同時に買える場面でラーメン屋だけ表示された）。
+  // 1回の更新では「一番安い＝次の目標の店」1件だけ知らせる（v20）
+  let affordToastShop = null;
   SHOPS.forEach(shop => {
     if (S.lv[shop.id] > 0) { affordState[shop.id] = true; return; }
     if ((shop.d === 1 && !d2Unlocked()) || (shop.d === 2 && !d3Unlocked())) return;
     const af = buildCost(shop) > 0 && S.coins >= buildCost(shop);
-    if (affordInit && af && affordState[shop.id] === false) { toast('🛒 ' + shop.name + ' が建てられるよ！マップの看板をタップ'); play('open'); }
+    if (affordInit && af && affordState[shop.id] === false && (!affordToastShop || shop.cost < affordToastShop.cost)) affordToastShop = shop;
     affordState[shop.id] = af;
   });
+  if (affordToastShop) { toast('🛒 ' + affordToastShop.name + ' が建てられるよ！マップの看板をタップ'); play('open'); }
   affordInit = true;
   // プロット側の数値（3Dは three3d へ同期、2DはDOM更新）
   SHOPS.forEach(shop => {
@@ -832,6 +868,8 @@ function refreshAll() {
       const maxed = up.max && S.ups[up.id] >= up.max;
       ref.btn.innerHTML = maxed ? 'MAX' : '強化<br>' + fmt(upCost(up));
       ref.btn.disabled = maxed || S.coins < upCost(up);
+      // 買える強化はカードごと金枠で光らせて、買えないものと一目で区別できるようにする（v20）
+      if (ref.card) ref.card.classList.toggle('afford', !maxed && S.coins >= upCost(up));
     });
   }
   // ガチャ
